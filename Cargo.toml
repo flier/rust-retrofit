@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "retrofit",
+    "retrofit-core",
+    "retrofit-macros",
+]
