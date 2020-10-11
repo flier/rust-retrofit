@@ -57,62 +57,8 @@ impl FromStr for RepoType {
 #[service(base_url = "https://api.github.com/")]
 #[default_headers(accept = "application/vnd.github.v3+json")]
 pub trait GithubService: Service {
-    #[get("users/{username}/repos")]
-    fn list_repo(&self, username: &str, r#type: Option<RepoType>)
-        -> Result<Vec<Repo>, Self::Error>;
-}
-
-fn github_service(base_url: &str) -> impl GithubService {
-    static APP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
-
-    struct Client {
-        client: reqwest::blocking::Client,
-        base_url: String,
-    }
-
-    impl Service for Client {
-        type Error = reqwest::Error;
-    }
-
-    impl GithubService for Client {
-        fn list_repo(
-            &self,
-            username: &str,
-            r#type: Option<RepoType>,
-        ) -> Result<Vec<Repo>, Self::Error> {
-            let url = format!(
-                "{base_url}users/{username}/repos",
-                base_url = self.base_url,
-                username = username
-            );
-            let mut req = self.client.get(&url);
-            if let Some(ty) = r#type {
-                req = req.query(&[("type", ty.to_string())])
-            }
-            trace!(?req, "req");
-            let res = req.send()?;
-            trace!(?res, "res");
-            let text = res.text()?;
-            trace!(%text, "text");
-            Ok(serde_json::from_reader(std::io::Cursor::new(text)).unwrap())
-        }
-    }
-
-    Client {
-        client: reqwest::blocking::Client::builder()
-            .user_agent(APP_USER_AGENT)
-            .default_headers({
-                let mut headers = reqwest::header::HeaderMap::new();
-                headers.insert(
-                    reqwest::header::ACCEPT,
-                    reqwest::header::HeaderValue::from_static("application/vnd.github.v3+json"),
-                );
-                headers
-            })
-            .build()
-            .expect("client"),
-        base_url: base_url.to_string(),
-    }
+    #[get("users/{username}/repos?type={ty}")]
+    fn list_repo(&self, username: &str, ty: Option<RepoType>) -> Result<Vec<Repo>, Self::Error>;
 }
 
 mod opt {
