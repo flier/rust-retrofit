@@ -7,69 +7,24 @@ use syn::{
     parse_quote,
     punctuated::Punctuated,
     spanned::Spanned,
-    Attribute, Error, Expr, ItemTrait, LitStr, Result, Token, TraitItemMethod,
+    token, Attribute, Error, Expr, ItemTrait, LitStr, Result, Token, TraitItemMethod,
 };
 
 lazy_static::lazy_static! {
     static ref RE_FMT_ARG: Regex = Regex::new(r"\{(?P<name>\w+)(:[^\}]+)?\}").unwrap();
 }
 
-pub fn service(_attr: TokenStream, item: ItemTrait) -> Result<TokenStream> {
+pub fn service(_attr: TokenStream, mut item: ItemTrait) -> Result<TokenStream> {
+    ensure_trait_bound(&mut item.supertraits);
+
     let vis = &item.vis;
     let trait_name = &item.ident;
-    let (impl_generics, ty_generics, where_clause) = item.generics.split_for_impl();
-
     let fn_name = Ident::new(&trait_name.to_string().to_snake(), Span::call_site());
     let client_name = Ident::new(&format!("{}Client", trait_name), Span::call_site());
 
-    let methods = item
-        .items
-        .iter()
-        .flat_map(|item| match item {
-            syn::TraitItem::Method(method) if method.default.is_none() => Some(method),
-            _ => None,
-        })
-        .map(|method| {
-            let sig = &method.sig;
-            let req = Request::extract(&method)?;
-            let path = req.path();
-            let args = {
-                let args = req.args();
-                let fmt = path.value();
-                let args = args.iter().cloned().chain(
-                    RE_FMT_ARG
-                        .captures_iter(&fmt)
-                        .flat_map(|cap| {
-                            let name = &cap["name"];
-                            if args.iter().any(|arg| arg.ident == name) {
-                                None
-                            } else {
-                                Some(Ident::new(name, Span::call_site()))
-                            }
-                        })
-                        .map(|id| {
-                            parse_quote! { #id = #id }
-                        }),
-                );
+    let methods = impl_methods(item.items.iter());
 
-                quote! { #(#args),* }
-            };
-
-            Ok(quote! {
-                #sig {
-                    let url = format!(
-                        concat!("{base_url}", #path),
-                        base_url = self.base_url,
-                        #args
-                    );
-                    let mut req = self.client.get(&url);
-                    let res = req.send()?;
-                    res.json()
-                }
-            })
-        })
-        .collect::<Result<Vec<_>>>()?;
-
+    let (impl_generics, ty_generics, where_clause) = item.generics.split_for_impl();
     let impl_fn = quote! {
         #vis fn #fn_name(base_url: &str) -> impl #trait_name {
             struct #client_name {
@@ -113,19 +68,101 @@ pub fn service(_attr: TokenStream, item: ItemTrait) -> Result<TokenStream> {
     Ok(expanded)
 }
 
+fn ensure_trait_bound(supertraits: &mut Punctuated<syn::TypeParamBound, token::Add>) {
+    let bounded = supertraits.iter().any(|t| match t {
+        syn::TypeParamBound::Trait(syn::TraitBound { path, .. }) => {
+            path.is_ident("Service") || *path == parse_quote! { retrofit::Service }
+        }
+        _ => false,
+    });
+
+    if !bounded {
+        supertraits.push(syn::TypeParamBound::Trait(
+            parse_quote! { retrofit::Service },
+        ));
+    }
+}
+
+fn impl_methods<'a>(
+    items: impl Iterator<Item = &'a syn::TraitItem> + 'a,
+) -> impl Iterator<Item = TokenStream> + 'a {
+    items
+        .flat_map(|item| match item {
+            syn::TraitItem::Method(method) if method.default.is_none() => Some(method),
+            _ => None,
+        })
+        .map(|method| {
+            let sig = &method.sig;
+            let req = Request::extract(&method).expect("request");
+            let path = req.path();
+            let args = {
+                let args = req.args();
+                let fmt = path.value();
+                let args = args.iter().cloned().chain(
+                    RE_FMT_ARG
+                        .captures_iter(&fmt)
+                        .flat_map(|cap| {
+                            let name = &cap["name"];
+                            if args.iter().any(|arg| arg.ident == name) {
+                                None
+                            } else {
+                                Some(Ident::new(name, Span::call_site()))
+                            }
+                        })
+                        .map(|id| {
+                            parse_quote! { #id = #id }
+                        }),
+                );
+
+                quote! { #(#args),* }
+            };
+
+            quote! {
+                #sig {
+                    let url = format!(
+                        concat!("{base_url}", #path),
+                        base_url = self.base_url,
+                        #args
+                    );
+                    let mut req = self.client.get(&url);
+                    let res = req.send()?;
+                    res.json()
+                }
+            }
+        })
+}
+
 #[derive(Clone, Debug)]
 enum Request {
-    Get { path: LitStr, args: Args },
-    Head { path: LitStr, args: Args },
-    Patch { path: LitStr, args: Args },
-    Post { path: LitStr, args: Args },
-    Put { path: LitStr, args: Args },
-    Delete { path: LitStr, args: Args },
+    Get {
+        path: LitStr,
+        args: Punctuated<Arg, Token![,]>,
+    },
+    Head {
+        path: LitStr,
+        args: Punctuated<Arg, Token![,]>,
+    },
+    Patch {
+        path: LitStr,
+        args: Punctuated<Arg, Token![,]>,
+    },
+    Post {
+        path: LitStr,
+        args: Punctuated<Arg, Token![,]>,
+    },
+    Put {
+        path: LitStr,
+        args: Punctuated<Arg, Token![,]>,
+    },
+    Delete {
+        path: LitStr,
+        args: Punctuated<Arg, Token![,]>,
+    },
 }
 
 impl Request {
     pub fn extract(method: &TraitItemMethod) -> Result<Self> {
-        let args = Args::extract(&method.attrs)?;
+        let args = extract_args(&method.attrs)?;
 
         for attr in &method.attrs {
             if attr.path.is_ident("get") {
@@ -144,8 +181,11 @@ impl Request {
         }
 
         Err(Error::new(
-            method.span(),
-            "expected `get`, `post` or other method",
+            method.sig.span(),
+            format!(
+                "expected `get`, `post` or other request for the `{}` method",
+                method.sig.ident
+            ),
         ))
     }
 
@@ -167,41 +207,28 @@ impl Request {
             | Request::Patch { args, .. }
             | Request::Post { args, .. }
             | Request::Put { args, .. }
-            | Request::Delete { args, .. } => &args.0,
+            | Request::Delete { args, .. } => &args,
         }
     }
 }
 
-#[derive(Clone, Debug, Default)]
-struct Args(Punctuated<Arg, Token![,]>);
+fn extract_args(attrs: &[Attribute]) -> Result<Punctuated<Arg, Token![,]>> {
+    attrs
+        .iter()
+        .filter(|attr| attr.path.is_ident("args"))
+        .map(|attr| {
+            attr.parse_args_with(Punctuated::parse_terminated)
+                .map(|args| args.into_pairs())
+        })
+        .collect::<Result<Vec<_>>>()
+        .map(|args| args.into_iter().flatten().collect())
+}
 
 #[derive(Clone, Debug)]
 struct Arg {
     pub ident: Ident,
     pub eq_token: Token![=],
     pub expr: Expr,
-}
-
-impl Args {
-    pub fn extract(attrs: &[Attribute]) -> Result<Self> {
-        let args = attrs
-            .iter()
-            .filter(|attr| attr.path.is_ident("args"))
-            .map(|attr| attr.parse_args::<Args>())
-            .collect::<Result<Vec<Args>>>()?;
-
-        Ok(Args(
-            args.into_iter()
-                .flat_map(|args| args.0.into_pairs())
-                .collect(),
-        ))
-    }
-}
-
-impl Parse for Args {
-    fn parse(input: ParseStream<'_>) -> Result<Self> {
-        Punctuated::parse_terminated(input).map(Args)
-    }
 }
 
 impl Parse for Arg {
@@ -211,12 +238,6 @@ impl Parse for Arg {
             eq_token: input.parse()?,
             expr: input.parse()?,
         })
-    }
-}
-
-impl ToTokens for Args {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        self.0.to_tokens(tokens);
     }
 }
 

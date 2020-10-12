@@ -6,7 +6,7 @@ use derive_more::Display;
 use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
 
-use retrofit::{args, default_headers, get, service, Service};
+use retrofit::{args, default_headers, get, service};
 
 #[derive(Debug, Clone, Display, Serialize, Deserialize)]
 #[display(
@@ -55,7 +55,7 @@ impl FromStr for RepoType {
 
 #[service(base_url = "https://api.github.com/")]
 #[default_headers(accept = "application/vnd.github.v3+json")]
-pub trait GithubService: Service {
+pub trait GithubService {
     #[get("users/{username}/repos?type={ty}")]
     #[args(ty = ty.map(|ty| ty.to_string()).unwrap_or_default())]
     fn list_repo(&self, username: &str, ty: Option<RepoType>) -> Result<Vec<Repo>, Self::Error>;
