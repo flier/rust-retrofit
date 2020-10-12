@@ -1,20 +1,20 @@
-use std::collections::HashMap;
-
 use case::CaseExt;
-use proc_macro2::{Ident, Literal, Span, TokenStream};
-use quote::quote;
+use proc_macro2::{Ident, Span, TokenStream};
+use quote::{quote, ToTokens};
 use regex::Regex;
 use syn::{
     parse::{Parse, ParseStream},
+    parse_quote,
+    punctuated::Punctuated,
     spanned::Spanned,
-    Error, ItemTrait, Result, TraitItemMethod,
+    Attribute, Error, Expr, ItemTrait, LitStr, Result, Token, TraitItemMethod,
 };
 
 lazy_static::lazy_static! {
     static ref RE_FMT_ARG: Regex = Regex::new(r"\{(?P<name>\w+)(:[^\}]+)?\}").unwrap();
 }
 
-pub fn service(attr: TokenStream, item: ItemTrait) -> Result<TokenStream> {
+pub fn service(_attr: TokenStream, item: ItemTrait) -> Result<TokenStream> {
     let vis = &item.vis;
     let trait_name = &item.ident;
     let (impl_generics, ty_generics, where_clause) = item.generics.split_for_impl();
@@ -31,44 +31,33 @@ pub fn service(attr: TokenStream, item: ItemTrait) -> Result<TokenStream> {
         })
         .map(|method| {
             let sig = &method.sig;
-            let args = sig
-                .inputs
-                .iter()
-                .flat_map(|arg| match arg {
-                    syn::FnArg::Typed(syn::PatType { pat, ty, .. }) => {
-                        match (pat.as_ref(), ty.as_ref()) {
-                            (
-                                syn::Pat::Ident(syn::PatIdent { ident, .. }),
-                                syn::Type::Path(syn::TypePath { path, .. }),
-                            ) => Some((ident.to_string(), path)),
-                            _ => None,
-                        }
-                    }
-                    _ => None,
-                })
-                .collect::<HashMap<_, _>>();
-            let req = extract_request(&method)?;
+            let req = Request::extract(&method)?;
             let path = req.path();
-            let path_str = path.to_string();
-            let fmt_args = RE_FMT_ARG.captures_iter(&path_str).map(|cap| {
-                let name = &cap["name"];
-                let id = Ident::new(name, Span::call_site());
-                match args.get(name) {
-                    Some(path) if path.segments.first().unwrap().ident == "Option" => {
-                        quote! { #id = #id.map(|v| v.to_string()).unwrap_or_default() }
-                    }
-                    _ => {
-                        quote! { #id = #id }
-                    }
-                }
-            });
+            let args = {
+                let args = req.args();
+                let fmt = path.value();
+                let names = RE_FMT_ARG
+                    .captures_iter(&fmt)
+                    .map(|cap| cap["name"].to_string())
+                    .filter(|name| !args.iter().any(|arg| arg.ident == name))
+                    .collect::<Vec<_>>();
+                let args = args
+                    .into_iter()
+                    .cloned()
+                    .chain(names.into_iter().map(|name| {
+                        let id = Ident::new(&name, Span::call_site());
+                        parse_quote! { #id = #id }
+                    }));
+
+                quote! { #(#args),* }
+            };
 
             Ok(quote! {
                 #sig {
                     let url = format!(
                         concat!("{base_url}", #path),
                         base_url = self.base_url,
-                        #(#fmt_args),*
+                        #args
                     );
                     let mut req = self.client.get(&url);
                     let res = req.send()?;
@@ -121,114 +110,117 @@ pub fn service(attr: TokenStream, item: ItemTrait) -> Result<TokenStream> {
     Ok(expanded.into())
 }
 
-fn extract_request(method: &TraitItemMethod) -> Result<Request> {
-    for attr in &method.attrs {
-        if attr.path.is_ident("get") {
-            return attr.parse_args().map(Request::Get);
-        } else if attr.path.is_ident("head") {
-            return attr.parse_args().map(Request::Head);
-        } else if attr.path.is_ident("patch") {
-            return attr.parse_args().map(Request::Patch);
-        } else if attr.path.is_ident("post") {
-            return attr.parse_args().map(Request::Post);
-        } else if attr.path.is_ident("put") {
-            return attr.parse_args().map(Request::Put);
-        } else if attr.path.is_ident("delete") {
-            return attr.parse_args().map(Request::Delete);
-        }
-    }
-
-    Err(Error::new(
-        method.span(),
-        "expected `get`, `post` or other method",
-    ))
-}
-
+#[derive(Clone, Debug)]
 enum Request {
-    Get(Get),
-    Head(Head),
-    Patch(Patch),
-    Post(Post),
-    Put(Put),
-    Delete(Delete),
-}
-
-struct Get {
-    pub path: Literal,
-}
-struct Head {
-    pub path: Literal,
-}
-struct Patch {
-    pub path: Literal,
-}
-struct Post {
-    pub path: Literal,
-}
-struct Put {
-    pub path: Literal,
-}
-struct Delete {
-    pub path: Literal,
+    Get { path: LitStr, args: Args },
+    Head { path: LitStr, args: Args },
+    Patch { path: LitStr, args: Args },
+    Post { path: LitStr, args: Args },
+    Put { path: LitStr, args: Args },
+    Delete { path: LitStr, args: Args },
 }
 
 impl Request {
-    pub fn path(&self) -> &Literal {
+    pub fn extract(method: &TraitItemMethod) -> Result<Self> {
+        let args = Args::extract(&method.attrs)?;
+
+        for attr in &method.attrs {
+            if attr.path.is_ident("get") {
+                return attr.parse_args().map(|path| Request::Get { path, args });
+            } else if attr.path.is_ident("head") {
+                return attr.parse_args().map(|path| Request::Head { path, args });
+            } else if attr.path.is_ident("patch") {
+                return attr.parse_args().map(|path| Request::Patch { path, args });
+            } else if attr.path.is_ident("post") {
+                return attr.parse_args().map(|path| Request::Post { path, args });
+            } else if attr.path.is_ident("put") {
+                return attr.parse_args().map(|path| Request::Put { path, args });
+            } else if attr.path.is_ident("delete") {
+                return attr.parse_args().map(|path| Request::Delete { path, args });
+            }
+        }
+
+        Err(Error::new(
+            method.span(),
+            "expected `get`, `post` or other method",
+        ))
+    }
+
+    pub fn path(&self) -> &LitStr {
         match self {
-            Request::Get(Get { path, .. })
-            | Request::Head(Head { path, .. })
-            | Request::Patch(Patch { path, .. })
-            | Request::Post(Post { path, .. })
-            | Request::Put(Put { path, .. })
-            | Request::Delete(Delete { path, .. }) => path,
+            Request::Get { path, .. }
+            | Request::Head { path, .. }
+            | Request::Patch { path, .. }
+            | Request::Post { path, .. }
+            | Request::Put { path, .. }
+            | Request::Delete { path, .. } => &path,
+        }
+    }
+
+    pub fn args(&self) -> &Punctuated<Arg, Token![,]> {
+        match self {
+            Request::Get { args, .. }
+            | Request::Head { args, .. }
+            | Request::Patch { args, .. }
+            | Request::Post { args, .. }
+            | Request::Put { args, .. }
+            | Request::Delete { args, .. } => &args.0,
         }
     }
 }
 
-impl Parse for Get {
+#[derive(Clone, Debug, Default)]
+struct Args(Punctuated<Arg, Token![,]>);
+
+#[derive(Clone, Debug)]
+struct Arg {
+    pub ident: Ident,
+    pub eq_token: Token![=],
+    pub expr: Expr,
+}
+
+impl Args {
+    pub fn extract(attrs: &[Attribute]) -> Result<Self> {
+        let args = attrs
+            .iter()
+            .filter(|attr| attr.path.is_ident("args"))
+            .map(|attr| attr.parse_args::<Args>())
+            .collect::<Result<Vec<Args>>>()?;
+
+        Ok(Args(
+            args.into_iter()
+                .flat_map(|args| args.0.into_pairs())
+                .collect(),
+        ))
+    }
+}
+
+impl Parse for Args {
     fn parse(input: ParseStream<'_>) -> Result<Self> {
-        Ok(Self {
-            path: input.parse()?,
+        Punctuated::parse_terminated(input).map(Args)
+    }
+}
+
+impl Parse for Arg {
+    fn parse(input: ParseStream<'_>) -> Result<Self> {
+        Ok(Arg {
+            ident: input.parse()?,
+            eq_token: input.parse()?,
+            expr: input.parse()?,
         })
     }
 }
 
-impl Parse for Head {
-    fn parse(input: ParseStream<'_>) -> Result<Self> {
-        Ok(Self {
-            path: input.parse()?,
-        })
+impl ToTokens for Args {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        self.0.to_tokens(tokens);
     }
 }
 
-impl Parse for Patch {
-    fn parse(input: ParseStream<'_>) -> Result<Self> {
-        Ok(Self {
-            path: input.parse()?,
-        })
-    }
-}
-
-impl Parse for Post {
-    fn parse(input: ParseStream<'_>) -> Result<Self> {
-        Ok(Self {
-            path: input.parse()?,
-        })
-    }
-}
-
-impl Parse for Put {
-    fn parse(input: ParseStream<'_>) -> Result<Self> {
-        Ok(Self {
-            path: input.parse()?,
-        })
-    }
-}
-
-impl Parse for Delete {
-    fn parse(input: ParseStream<'_>) -> Result<Self> {
-        Ok(Self {
-            path: input.parse()?,
-        })
+impl ToTokens for Arg {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        self.ident.to_tokens(tokens);
+        self.eq_token.to_tokens(tokens);
+        self.expr.to_tokens(tokens);
     }
 }

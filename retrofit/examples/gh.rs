@@ -5,9 +5,8 @@ use chrono::{DateTime, Utc};
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
-use tracing::trace;
 
-use retrofit::{default_headers, get, service, Service};
+use retrofit::{args, default_headers, get, service, Service};
 
 #[derive(Debug, Clone, Display, Serialize, Deserialize)]
 #[display(
@@ -58,6 +57,7 @@ impl FromStr for RepoType {
 #[default_headers(accept = "application/vnd.github.v3+json")]
 pub trait GithubService: Service {
     #[get("users/{username}/repos?type={ty}")]
+    #[args(ty = ty.map(|ty| ty.to_string()).unwrap_or_default())]
     fn list_repo(&self, username: &str, ty: Option<RepoType>) -> Result<Vec<Repo>, Self::Error>;
 }
 

@@ -2,19 +2,37 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::Result;
 
-pub fn get(attr: TokenStream, item: syn::TraitItemMethod) -> Result<TokenStream> {
+pub fn head(_attr: TokenStream, item: syn::TraitItemMethod) -> Result<TokenStream> {
     let expanded = quote! { #item };
 
     Ok(expanded.into())
 }
 
-pub fn post(attr: TokenStream, item: syn::TraitItemMethod) -> Result<TokenStream> {
+pub fn get(_attr: TokenStream, item: syn::TraitItemMethod) -> Result<TokenStream> {
     let expanded = quote! { #item };
 
     Ok(expanded.into())
 }
 
-pub fn put(attr: TokenStream, item: syn::TraitItemMethod) -> Result<TokenStream> {
+pub fn post(_attr: TokenStream, item: syn::TraitItemMethod) -> Result<TokenStream> {
+    let expanded = quote! { #item };
+
+    Ok(expanded.into())
+}
+
+pub fn put(_attr: TokenStream, item: syn::TraitItemMethod) -> Result<TokenStream> {
+    let expanded = quote! { #item };
+
+    Ok(expanded.into())
+}
+
+pub fn patch(_attr: TokenStream, item: syn::TraitItemMethod) -> Result<TokenStream> {
+    let expanded = quote! { #item };
+
+    Ok(expanded.into())
+}
+
+pub fn delete(_attr: TokenStream, item: syn::TraitItemMethod) -> Result<TokenStream> {
     let expanded = quote! { #item };
 
     Ok(expanded.into())
