@@ -36,18 +36,21 @@ pub fn service(_attr: TokenStream, item: ItemTrait) -> Result<TokenStream> {
             let args = {
                 let args = req.args();
                 let fmt = path.value();
-                let names = RE_FMT_ARG
-                    .captures_iter(&fmt)
-                    .map(|cap| cap["name"].to_string())
-                    .filter(|name| !args.iter().any(|arg| arg.ident == name))
-                    .collect::<Vec<_>>();
-                let args = args
-                    .into_iter()
-                    .cloned()
-                    .chain(names.into_iter().map(|name| {
-                        let id = Ident::new(&name, Span::call_site());
-                        parse_quote! { #id = #id }
-                    }));
+                let args = args.iter().cloned().chain(
+                    RE_FMT_ARG
+                        .captures_iter(&fmt)
+                        .flat_map(|cap| {
+                            let name = &cap["name"];
+                            if args.iter().any(|arg| arg.ident == name) {
+                                None
+                            } else {
+                                Some(Ident::new(name, Span::call_site()))
+                            }
+                        })
+                        .map(|id| {
+                            parse_quote! { #id = #id }
+                        }),
+                );
 
                 quote! { #(#args),* }
             };
@@ -107,7 +110,7 @@ pub fn service(_attr: TokenStream, item: ItemTrait) -> Result<TokenStream> {
         #impl_fn
     };
 
-    Ok(expanded.into())
+    Ok(expanded)
 }
 
 #[derive(Clone, Debug)]
