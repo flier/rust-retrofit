@@ -1,4 +1,5 @@
 use case::CaseExt;
+use lazy_static::lazy_static;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{quote, ToTokens};
 use regex::Regex;
@@ -10,7 +11,7 @@ use syn::{
     token, Attribute, Error, Expr, ItemTrait, LitStr, Result, Token, TraitItemMethod,
 };
 
-lazy_static::lazy_static! {
+lazy_static! {
     static ref RE_FMT_ARG: Regex = Regex::new(r"\{(?P<name>\w+)(:[^\}]+)?\}").unwrap();
 }
 
@@ -94,10 +95,10 @@ fn impl_methods<'a>(
         .map(|method| {
             let sig = &method.sig;
             let req = Request::extract(&method).expect("request");
-            let path = req.path();
+            let path = req.path;
             let args = {
-                let args = req.args();
                 let fmt = path.value();
+                let args = req.args;
                 let args = args.iter().cloned().chain(
                     RE_FMT_ARG
                         .captures_iter(&fmt)
@@ -133,31 +134,10 @@ fn impl_methods<'a>(
 }
 
 #[derive(Clone, Debug)]
-enum Request {
-    Get {
-        path: LitStr,
-        args: Punctuated<Arg, Token![,]>,
-    },
-    Head {
-        path: LitStr,
-        args: Punctuated<Arg, Token![,]>,
-    },
-    Patch {
-        path: LitStr,
-        args: Punctuated<Arg, Token![,]>,
-    },
-    Post {
-        path: LitStr,
-        args: Punctuated<Arg, Token![,]>,
-    },
-    Put {
-        path: LitStr,
-        args: Punctuated<Arg, Token![,]>,
-    },
-    Delete {
-        path: LitStr,
-        args: Punctuated<Arg, Token![,]>,
-    },
+struct Request {
+    method: http::Method,
+    path: LitStr,
+    args: Punctuated<Arg, Token![,]>,
 }
 
 impl Request {
@@ -165,18 +145,43 @@ impl Request {
         let args = extract_args(&method.attrs)?;
 
         for attr in &method.attrs {
-            if attr.path.is_ident("get") {
-                return attr.parse_args().map(|path| Request::Get { path, args });
-            } else if attr.path.is_ident("head") {
-                return attr.parse_args().map(|path| Request::Head { path, args });
-            } else if attr.path.is_ident("patch") {
-                return attr.parse_args().map(|path| Request::Patch { path, args });
-            } else if attr.path.is_ident("post") {
-                return attr.parse_args().map(|path| Request::Post { path, args });
-            } else if attr.path.is_ident("put") {
-                return attr.parse_args().map(|path| Request::Put { path, args });
-            } else if attr.path.is_ident("delete") {
-                return attr.parse_args().map(|path| Request::Delete { path, args });
+            if attr.path.is_ident("get") || attr.path == parse_quote! { retrofit::get } {
+                return attr.parse_args().map(|path| Request {
+                    method: http::Method::GET,
+                    path,
+                    args,
+                });
+            } else if attr.path.is_ident("head") || attr.path == parse_quote! { retrofit::head } {
+                return attr.parse_args().map(|path| Request {
+                    method: http::Method::HEAD,
+                    path,
+                    args,
+                });
+            } else if attr.path.is_ident("patch") || attr.path == parse_quote! { retrofit::patch } {
+                return attr.parse_args().map(|path| Request {
+                    method: http::Method::PATCH,
+                    path,
+                    args,
+                });
+            } else if attr.path.is_ident("post") || attr.path == parse_quote! { retrofit::post } {
+                return attr.parse_args().map(|path| Request {
+                    method: http::Method::POST,
+                    path,
+                    args,
+                });
+            } else if attr.path.is_ident("put") || attr.path == parse_quote! { retrofit::put } {
+                return attr.parse_args().map(|path| Request {
+                    method: http::Method::PUT,
+                    path,
+                    args,
+                });
+            } else if attr.path.is_ident("delete") || attr.path == parse_quote! { retrofit::delete }
+            {
+                return attr.parse_args().map(|path| Request {
+                    method: http::Method::DELETE,
+                    path,
+                    args,
+                });
             }
         }
 
@@ -187,28 +192,6 @@ impl Request {
                 method.sig.ident
             ),
         ))
-    }
-
-    pub fn path(&self) -> &LitStr {
-        match self {
-            Request::Get { path, .. }
-            | Request::Head { path, .. }
-            | Request::Patch { path, .. }
-            | Request::Post { path, .. }
-            | Request::Put { path, .. }
-            | Request::Delete { path, .. } => &path,
-        }
-    }
-
-    pub fn args(&self) -> &Punctuated<Arg, Token![,]> {
-        match self {
-            Request::Get { args, .. }
-            | Request::Head { args, .. }
-            | Request::Patch { args, .. }
-            | Request::Post { args, .. }
-            | Request::Put { args, .. }
-            | Request::Delete { args, .. } => &args,
-        }
     }
 }
 
