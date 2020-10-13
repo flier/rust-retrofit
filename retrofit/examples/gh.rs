@@ -71,8 +71,8 @@ pub struct Commit {
     pub url: String,
 }
 
-#[service(base_url = "https://api.github.com")]
-#[client(user_agent = "gh/1.0", connection_verbose = true)]
+#[service(base_url = "https://api.github.com/")]
+#[client(user_agent = "gh/1.0", connection_verbose = true, no_gzip)]
 #[default_headers(accept = "application/vnd.github.v3+json")]
 pub trait GithubService {
     #[get("users/{username}/repos?type={ty}")]
@@ -180,27 +180,24 @@ fn main() -> Result<()> {
     let github = github_service();
 
     match opt.cmd {
-        Cmd::Repo {
-            repo: Repo::List { username, r#type },
-        } => {
-            for repo in github.list_repo(&username, r#type)? {
-                println!("{}", repo);
+        Cmd::Repo { repo } => match repo {
+            Repo::List { username, r#type } => {
+                for repo in github.list_repo(&username, r#type)? {
+                    println!("{}", repo);
+                }
             }
-        }
-        Cmd::Repo {
-            repo: Repo::Languages { owner, repo },
-        } => {
-            for (lang, bytes) in github.list_repo_languages(&owner, &repo)? {
-                println!("{}: {}", lang, bytes);
+            Repo::Languages { owner, repo } => {
+                for (lang, bytes) in github.list_repo_languages(&owner, &repo)? {
+                    println!("{}: {}", lang, bytes);
+                }
             }
-        }
-        Cmd::Repo {
-            repo: Repo::Tags { owner, repo },
-        } => {
-            for tag in github.list_repo_tags(&owner, &repo)? {
-                println!("{}", tag);
+            Repo::Tags { owner, repo } => {
+                for tag in github.list_repo_tags(&owner, &repo)? {
+                    println!("{}", tag);
+                }
             }
-        }
+            _ => unimplemented!(),
+        },
         _ => unimplemented!(),
     }
 

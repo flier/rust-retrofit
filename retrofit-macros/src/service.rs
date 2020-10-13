@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use case::CaseExt;
 use lazy_static::lazy_static;
 use proc_macro2::{Ident, Span, TokenStream};
@@ -15,18 +13,6 @@ use syn::{
 
 lazy_static! {
     static ref RE_FMT_ARG: Regex = Regex::new(r"\{(?P<name>\w+)(:[^\}]+)?\}").unwrap();
-    static ref CLIENT_OPTIONS: HashSet<&'static str> = {
-        let mut s = HashSet::new();
-        s.insert("connection_verbose");
-        s.insert("cookie_store");
-        s.insert("gzip");
-        s.insert("pool_max_idle_per_host");
-        s.insert("referer");
-        s.insert("tcp_nodelay_");
-        s.insert("trust_dns");
-        s.insert("user_agent");
-        s
-    };
 }
 
 pub fn client(_args: Args, item: ItemTrait) -> Result<TokenStream> {
@@ -45,10 +31,12 @@ pub fn service(args: Args, mut item: ItemTrait) -> Result<TokenStream> {
                     .#ident(#expr)
                 }
             });
-    let service_options = args.0.into_iter().map(|Arg { ident, expr, .. }| {
-        quote! {
-            #ident: #expr.into(),
-        }
+    let service_options = args.0.into_iter().flat_map(|Arg { ident, expr, .. }| {
+        expr.map(|expr| {
+            quote! {
+                #ident: #expr.into(),
+            }
+        })
     });
 
     let vis = &item.vis;
@@ -292,16 +280,24 @@ impl Parse for Args {
 #[derive(Clone, Debug)]
 pub struct Arg {
     pub ident: Ident,
-    pub eq_token: Token![=],
-    pub expr: Expr,
+    pub eq_token: Option<Token![=]>,
+    pub expr: Option<Expr>,
 }
 
 impl Parse for Arg {
     fn parse(input: ParseStream<'_>) -> Result<Self> {
+        let ident = input.parse()?;
+        let lookahead = input.lookahead1();
+        let (eq_token, expr) = if lookahead.peek(Token![=]) {
+            (Some(input.parse()?), Some(input.parse()?))
+        } else {
+            (None, None)
+        };
+
         Ok(Arg {
-            ident: input.parse()?,
-            eq_token: input.parse()?,
-            expr: input.parse()?,
+            ident,
+            eq_token,
+            expr,
         })
     }
 }
