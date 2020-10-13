@@ -10,7 +10,7 @@ use syn::{
     parse_quote,
     punctuated::Punctuated,
     spanned::Spanned,
-    token, Attribute, Error, Expr, ItemTrait, LitStr, Result, Token, TraitItemMethod,
+    Attribute, Error, Expr, ItemTrait, LitStr, Result, Token, TraitItemMethod,
 };
 
 lazy_static! {
@@ -101,15 +101,7 @@ pub fn service(args: Args, mut item: ItemTrait) -> Result<TokenStream> {
     Ok(expanded)
 }
 
-pub struct Args(Punctuated<Arg, Token![,]>);
-
-impl Parse for Args {
-    fn parse(input: ParseStream<'_>) -> Result<Self> {
-        Punctuated::parse_terminated(input).map(Args)
-    }
-}
-
-fn ensure_trait_bound(supertraits: &mut Punctuated<syn::TypeParamBound, token::Add>) {
+fn ensure_trait_bound(supertraits: &mut Punctuated<syn::TypeParamBound, Token![+]>) {
     let bounded = supertraits.iter().any(|t| match t {
         syn::TypeParamBound::Trait(syn::TraitBound { path, .. }) => {
             path.is_ident("Service") || *path == parse_quote! { retrofit::Service }
@@ -275,15 +267,26 @@ impl Request {
 }
 
 fn extract_args(name: &str, attrs: &[Attribute]) -> Result<Punctuated<Arg, Token![,]>> {
+    let id = Ident::new(name, Span::call_site());
+    let path = parse_quote! { retrofit::#id };
+
     attrs
         .iter()
-        .filter(|attr| attr.path.is_ident(name))
+        .filter(|attr| attr.path.is_ident(name) || attr.path == path)
         .map(|attr| {
             attr.parse_args_with(Punctuated::parse_terminated)
                 .map(|args| args.into_pairs())
         })
         .collect::<Result<Vec<_>>>()
         .map(|args| args.into_iter().flatten().collect())
+}
+
+pub struct Args(Punctuated<Arg, Token![,]>);
+
+impl Parse for Args {
+    fn parse(input: ParseStream<'_>) -> Result<Self> {
+        Punctuated::parse_terminated(input).map(Args)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -314,18 +317,32 @@ impl ToTokens for Arg {
 fn extract_headers<'a>(
     name: &str,
     attrs: &'a [Attribute],
-) -> Result<Punctuated<Header, token::Comma>> {
+) -> Result<Punctuated<Header, Token![,]>> {
+    let id = Ident::new(name, Span::call_site());
+    let path = parse_quote! { retrofit::#id };
+
     attrs
         .iter()
-        .find(|attr| {
-            attr.path.is_ident(name) || attr.path == parse_quote! { retrofit::default_headers }
+        .filter(|attr| attr.path.is_ident(name) || attr.path == path)
+        .map(|attr| {
+            attr.parse_args_with(Punctuated::parse_terminated)
+                .map(|args| args.into_pairs())
         })
-        .map(|attr| attr.parse_args_with(Punctuated::parse_terminated))
-        .unwrap_or_else(|| Ok(Punctuated::new()))
+        .collect::<Result<Vec<_>>>()
+        .map(|args| args.into_iter().flatten().collect())
 }
 
 #[derive(Clone, Debug)]
-struct Header {
+pub struct Headers(Punctuated<Header, Token![,]>);
+
+impl Parse for Headers {
+    fn parse(input: ParseStream<'_>) -> Result<Self> {
+        Punctuated::parse_terminated(input).map(Headers)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Header {
     pub name: Ident,
     pub eq_token: Token![=],
     pub value: LitStr,

@@ -1,27 +1,21 @@
 use proc_macro2::TokenStream;
 use quote::ToTokens;
-use syn::Result;
+use syn::{ItemTrait, LitStr, Result, TraitItemMethod};
 
-pub fn head(_attr: TokenStream, item: syn::TraitItemMethod) -> Result<TokenStream> {
+use crate::service::{Args, Headers};
+
+pub fn request(_attr: LitStr, item: TraitItemMethod) -> Result<TokenStream> {
     Ok(item.into_token_stream())
 }
 
-pub fn get(_attr: TokenStream, item: syn::TraitItemMethod) -> Result<TokenStream> {
+pub fn args(_attr: Args, item: TraitItemMethod) -> Result<TokenStream> {
     Ok(item.into_token_stream())
 }
 
-pub fn post(_attr: TokenStream, item: syn::TraitItemMethod) -> Result<TokenStream> {
+pub fn headers(_attr: Headers, item: TraitItemMethod) -> Result<TokenStream> {
     Ok(item.into_token_stream())
 }
 
-pub fn put(_attr: TokenStream, item: syn::TraitItemMethod) -> Result<TokenStream> {
-    Ok(item.into_token_stream())
-}
-
-pub fn patch(_attr: TokenStream, item: syn::TraitItemMethod) -> Result<TokenStream> {
-    Ok(item.into_token_stream())
-}
-
-pub fn delete(_attr: TokenStream, item: syn::TraitItemMethod) -> Result<TokenStream> {
+pub fn default_headers(_attr: Headers, item: ItemTrait) -> Result<TokenStream> {
     Ok(item.into_token_stream())
 }

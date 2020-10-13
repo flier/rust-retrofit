@@ -41,63 +41,72 @@ pub fn client(attr: TokenStream, item: TokenStream) -> TokenStream {
 
 #[proc_macro_attribute]
 pub fn get(attr: TokenStream, item: TokenStream) -> TokenStream {
-    Output::process(request::get(
-        attr.into(),
+    Output::process(request::request(
+        syn::parse(attr).expect("path"),
         syn::parse(item).expect("trait fn"),
     ))
 }
 
 #[proc_macro_attribute]
 pub fn head(attr: TokenStream, item: TokenStream) -> TokenStream {
-    Output::process(request::head(
-        attr.into(),
+    Output::process(request::request(
+        syn::parse(attr).expect("path"),
         syn::parse(item).expect("trait fn"),
     ))
 }
 
 #[proc_macro_attribute]
 pub fn post(attr: TokenStream, item: TokenStream) -> TokenStream {
-    Output::process(request::post(
-        attr.into(),
+    Output::process(request::request(
+        syn::parse(attr).expect("path"),
         syn::parse(item).expect("trait fn"),
     ))
 }
 
 #[proc_macro_attribute]
 pub fn put(attr: TokenStream, item: TokenStream) -> TokenStream {
-    Output::process(request::put(
-        attr.into(),
+    Output::process(request::request(
+        syn::parse(attr).expect("path"),
         syn::parse(item).expect("trait fn"),
     ))
 }
 
 #[proc_macro_attribute]
 pub fn patch(attr: TokenStream, item: TokenStream) -> TokenStream {
-    Output::process(request::patch(
-        attr.into(),
+    Output::process(request::request(
+        syn::parse(attr).expect("path"),
         syn::parse(item).expect("trait fn"),
     ))
 }
 
 #[proc_macro_attribute]
 pub fn delete(attr: TokenStream, item: TokenStream) -> TokenStream {
-    Output::process(request::delete(
-        attr.into(),
+    Output::process(request::request(
+        syn::parse(attr).expect("path"),
         syn::parse(item).expect("trait fn"),
     ))
 }
 
 #[proc_macro_attribute]
-pub fn args(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    item
+pub fn args(attr: TokenStream, item: TokenStream) -> TokenStream {
+    Output::process(request::args(
+        syn::parse(attr).expect("args"),
+        syn::parse(item).expect("trait fn"),
+    ))
 }
 
 #[proc_macro_attribute]
-pub fn headers(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    item
+pub fn headers(attr: TokenStream, item: TokenStream) -> TokenStream {
+    Output::process(request::headers(
+        syn::parse(attr).expect("headers"),
+        syn::parse(item).expect("trait fn"),
+    ))
 }
 
 #[proc_macro_attribute]
-pub fn default_headers(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    item
+pub fn default_headers(attr: TokenStream, item: TokenStream) -> TokenStream {
+    Output::process(request::default_headers(
+        syn::parse(attr).expect("headers"),
+        syn::parse(item).expect("trait fn"),
+    ))
 }
