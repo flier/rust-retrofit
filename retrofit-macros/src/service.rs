@@ -176,6 +176,21 @@ fn generate_methods<'a>(items: &'a [syn::TraitItem]) -> impl Iterator<Item = Tok
                 Err(err) => Some(err.to_compile_error()),
             };
 
+            let options = extract_args("request", &method.attrs)
+                .expect("request")
+                .into_iter()
+                .map(|Arg { ident, expr, .. }| {
+                    if let Some(expr) = expr {
+                        quote! {
+                            req = req.#ident(#expr);
+                        }
+                    } else {
+                        quote! {
+                            req = req.#ident(#ident);
+                        }
+                    }
+                });
+
             quote! {
                 #sig {
                     let url = format!(
@@ -185,7 +200,10 @@ fn generate_methods<'a>(items: &'a [syn::TraitItem]) -> impl Iterator<Item = Tok
                     );
                     let mut req = self.client.get(&url);
                     #headers
+                    #(#options)*
+                    tracing::trace!("req: {:?}", req);
                     let res = req.send()?;
+                    tracing::trace!("res: {:?}", res);
                     res.json()
                 }
             }

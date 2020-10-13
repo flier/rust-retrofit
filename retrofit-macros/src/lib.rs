@@ -40,6 +40,14 @@ pub fn client(attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
+pub fn default_headers(attr: TokenStream, item: TokenStream) -> TokenStream {
+    Output::process(request::default_headers(
+        syn::parse(attr).expect("headers"),
+        syn::parse(item).expect("trait"),
+    ))
+}
+
+#[proc_macro_attribute]
 pub fn get(attr: TokenStream, item: TokenStream) -> TokenStream {
     Output::process(request::request(
         syn::parse(attr).expect("path"),
@@ -104,9 +112,9 @@ pub fn headers(attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
-pub fn default_headers(attr: TokenStream, item: TokenStream) -> TokenStream {
-    Output::process(request::default_headers(
-        syn::parse(attr).expect("headers"),
+pub fn request(attr: TokenStream, item: TokenStream) -> TokenStream {
+    Output::process(request::args(
+        syn::parse(attr).expect("args"),
         syn::parse(item).expect("trait fn"),
     ))
 }
