@@ -7,7 +7,7 @@ use derive_more::Display;
 use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
 
-use retrofit::{args, default_headers, get, service};
+use retrofit::{args, client, default_headers, get, service};
 
 #[derive(Debug, Clone, Display, Serialize, Deserialize)]
 #[display(
@@ -71,7 +71,8 @@ pub struct Commit {
     pub url: String,
 }
 
-#[service(base_url = "https://api.github.com", user_agent = "gh/1.0")]
+#[service(base_url = "https://api.github.com")]
+#[client(user_agent = "gh/1.0", connection_verbose = true)]
 #[default_headers(accept = "application/vnd.github.v3+json")]
 pub trait GithubService {
     #[get("users/{username}/repos?type={ty}")]
@@ -93,9 +94,6 @@ mod opt {
     #[derive(Debug, StructOpt)]
     #[structopt(about = "Work seamlessly with GitHub from the command line.")]
     pub struct Opt {
-        #[structopt(short = "u", long, default_value = "https://api.github.com/")]
-        pub base_url: String,
-
         #[structopt(subcommand)]
         pub cmd: Cmd,
     }
@@ -179,7 +177,7 @@ fn main() -> Result<()> {
 
     let opt = Opt::from_args();
 
-    let github = github_service(&opt.base_url);
+    let github = github_service();
 
     match opt.cmd {
         Cmd::Repo {

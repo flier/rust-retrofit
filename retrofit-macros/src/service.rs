@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use case::CaseExt;
 use lazy_static::lazy_static;
 use proc_macro2::{Ident, Span, TokenStream};
@@ -13,11 +15,41 @@ use syn::{
 
 lazy_static! {
     static ref RE_FMT_ARG: Regex = Regex::new(r"\{(?P<name>\w+)(:[^\}]+)?\}").unwrap();
+    static ref CLIENT_OPTIONS: HashSet<&'static str> = {
+        let mut s = HashSet::new();
+        s.insert("connection_verbose");
+        s.insert("cookie_store");
+        s.insert("gzip");
+        s.insert("pool_max_idle_per_host");
+        s.insert("referer");
+        s.insert("tcp_nodelay_");
+        s.insert("trust_dns");
+        s.insert("user_agent");
+        s
+    };
 }
 
-pub fn service(_attr: TokenStream, mut item: ItemTrait) -> Result<TokenStream> {
+pub fn client(_args: Args, item: ItemTrait) -> Result<TokenStream> {
+    Ok(item.into_token_stream())
+}
+
+pub fn service(args: Args, mut item: ItemTrait) -> Result<TokenStream> {
     ensure_trait_bound(&mut item.supertraits);
     ensure_method_return_result(&mut item.items);
+
+    let client_options =
+        extract_args("client", &item.attrs)?
+            .into_iter()
+            .map(|Arg { ident, expr, .. }| {
+                quote! {
+                    .#ident(#expr)
+                }
+            });
+    let service_options = args.0.into_iter().map(|Arg { ident, expr, .. }| {
+        quote! {
+            #ident: #expr.into(),
+        }
+    });
 
     let vis = &item.vis;
     let trait_name = &item.ident;
@@ -31,7 +63,7 @@ pub fn service(_attr: TokenStream, mut item: ItemTrait) -> Result<TokenStream> {
 
     let (impl_generics, ty_generics, where_clause) = item.generics.split_for_impl();
     let impl_fn = quote! {
-        #vis fn #fn_name(base_url: &str) -> impl #trait_name {
+        #vis fn #fn_name() -> impl #trait_name {
             struct #client_name {
                 client: reqwest::blocking::Client,
                 base_url: String,
@@ -47,13 +79,16 @@ pub fn service(_attr: TokenStream, mut item: ItemTrait) -> Result<TokenStream> {
 
             static APP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
+            let mut builder = reqwest::blocking::Client::builder();
+
             #client_name {
-                client: reqwest::blocking::Client::builder()
+                client: builder
                     .user_agent(APP_USER_AGENT)
                     .default_headers(#default_headers)
+                    #(#client_options)*
                     .build()
                     .expect("client"),
-                base_url: base_url.to_string(),
+                #(#service_options)*
             }
         }
     };
@@ -64,6 +99,14 @@ pub fn service(_attr: TokenStream, mut item: ItemTrait) -> Result<TokenStream> {
     };
 
     Ok(expanded)
+}
+
+pub struct Args(Punctuated<Arg, Token![,]>);
+
+impl Parse for Args {
+    fn parse(input: ParseStream<'_>) -> Result<Self> {
+        Punctuated::parse_terminated(input).map(Args)
+    }
 }
 
 fn ensure_trait_bound(supertraits: &mut Punctuated<syn::TypeParamBound, token::Add>) {
@@ -178,7 +221,7 @@ struct Request {
 
 impl Request {
     pub fn extract(method: &TraitItemMethod) -> Result<Self> {
-        let args = extract_args(&method.attrs)?;
+        let args = extract_args("args", &method.attrs)?;
 
         for attr in &method.attrs {
             if attr.path.is_ident("get") || attr.path == parse_quote! { retrofit::get } {
@@ -231,10 +274,10 @@ impl Request {
     }
 }
 
-fn extract_args(attrs: &[Attribute]) -> Result<Punctuated<Arg, Token![,]>> {
+fn extract_args(name: &str, attrs: &[Attribute]) -> Result<Punctuated<Arg, Token![,]>> {
     attrs
         .iter()
-        .filter(|attr| attr.path.is_ident("args"))
+        .filter(|attr| attr.path.is_ident(name))
         .map(|attr| {
             attr.parse_args_with(Punctuated::parse_terminated)
                 .map(|args| args.into_pairs())
@@ -244,7 +287,7 @@ fn extract_args(attrs: &[Attribute]) -> Result<Punctuated<Arg, Token![,]>> {
 }
 
 #[derive(Clone, Debug)]
-struct Arg {
+pub struct Arg {
     pub ident: Ident,
     pub eq_token: Token![=],
     pub expr: Expr,

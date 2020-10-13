@@ -26,7 +26,15 @@ impl Output for Result<proc_macro2::TokenStream, ParseError> {
 #[proc_macro_attribute]
 pub fn service(attr: TokenStream, item: TokenStream) -> TokenStream {
     Output::process(service::service(
-        attr.into(),
+        syn::parse(attr).expect("args"),
+        syn::parse(item).expect("trait"),
+    ))
+}
+
+#[proc_macro_attribute]
+pub fn client(attr: TokenStream, item: TokenStream) -> TokenStream {
+    Output::process(service::client(
+        syn::parse(attr).expect("args"),
         syn::parse(item).expect("trait"),
     ))
 }
