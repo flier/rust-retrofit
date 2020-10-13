@@ -23,7 +23,10 @@ pub fn service(_attr: TokenStream, mut item: ItemTrait) -> Result<TokenStream> {
     let fn_name = Ident::new(&trait_name.to_string().to_snake(), Span::call_site());
     let client_name = Ident::new(&format!("{}Client", trait_name), Span::call_site());
 
-    let methods = impl_methods(item.items.iter());
+    let methods = generate_methods(&item.items);
+
+    let default_headers = extract_headers("default_headers", &item.attrs)?;
+    let default_headers = generate_header_map(default_headers);
 
     let (impl_generics, ty_generics, where_clause) = item.generics.split_for_impl();
     let impl_fn = quote! {
@@ -46,14 +49,7 @@ pub fn service(_attr: TokenStream, mut item: ItemTrait) -> Result<TokenStream> {
             #client_name {
                 client: reqwest::blocking::Client::builder()
                     .user_agent(APP_USER_AGENT)
-                    .default_headers({
-                        let mut headers = reqwest::header::HeaderMap::new();
-                        headers.insert(
-                            reqwest::header::ACCEPT,
-                            reqwest::header::HeaderValue::from_static("application/vnd.github.v3+json"),
-                        );
-                        headers
-                    })
+                    .default_headers(#default_headers)
                     .build()
                     .expect("client"),
                 base_url: base_url.to_string(),
@@ -84,10 +80,9 @@ fn ensure_trait_bound(supertraits: &mut Punctuated<syn::TypeParamBound, token::A
     }
 }
 
-fn impl_methods<'a>(
-    items: impl Iterator<Item = &'a syn::TraitItem> + 'a,
-) -> impl Iterator<Item = TokenStream> + 'a {
+fn generate_methods<'a>(items: &'a [syn::TraitItem]) -> impl Iterator<Item = TokenStream> + 'a {
     items
+        .iter()
         .flat_map(|item| match item {
             syn::TraitItem::Method(method) if method.default.is_none() => Some(method),
             _ => None,
@@ -118,6 +113,21 @@ fn impl_methods<'a>(
                 quote! { #(#args),* }
             };
 
+            let headers = match extract_headers("headers", &method.attrs) {
+                Ok(headers) => {
+                    if headers.is_empty() {
+                        None
+                    } else {
+                        let headers = generate_header_map(headers);
+
+                        Some(quote! {
+                            req = req.headers(#headers);
+                        })
+                    }
+                }
+                Err(err) => Some(err.to_compile_error()),
+            };
+
             quote! {
                 #sig {
                     let url = format!(
@@ -126,6 +136,7 @@ fn impl_methods<'a>(
                         #args
                     );
                     let mut req = self.client.get(&url);
+                    #headers
                     let res = req.send()?;
                     res.json()
                 }
@@ -229,5 +240,55 @@ impl ToTokens for Arg {
         self.ident.to_tokens(tokens);
         self.eq_token.to_tokens(tokens);
         self.expr.to_tokens(tokens);
+    }
+}
+
+fn extract_headers<'a>(
+    name: &str,
+    attrs: &'a [Attribute],
+) -> Result<Punctuated<Header, token::Comma>> {
+    attrs
+        .iter()
+        .find(|attr| {
+            attr.path.is_ident(name) || attr.path == parse_quote! { retrofit::default_headers }
+        })
+        .map(|attr| attr.parse_args_with(Punctuated::parse_terminated))
+        .unwrap_or_else(|| Ok(Punctuated::new()))
+}
+
+#[derive(Clone, Debug)]
+struct Header {
+    pub name: Ident,
+    pub eq_token: Token![=],
+    pub value: LitStr,
+}
+
+impl Parse for Header {
+    fn parse(input: ParseStream<'_>) -> Result<Self> {
+        Ok(Header {
+            name: input.parse()?,
+            eq_token: input.parse()?,
+            value: input.parse()?,
+        })
+    }
+}
+
+fn generate_header_map(headers: impl IntoIterator<Item = Header>) -> TokenStream {
+    let insert_headers = headers.into_iter().map(|header| {
+        let name = LitStr::new(&header.name.to_string().to_dashed(), Span::call_site());
+        let value = header.value;
+        quote! {
+            headers.insert(
+                #name,
+                reqwest::header::HeaderValue::from_static(#value)
+            );
+        }
+    });
+    quote! {
+        {
+            let mut headers = reqwest::header::HeaderMap::new();
+            #(#insert_headers)*
+            headers
+        }
     }
 }

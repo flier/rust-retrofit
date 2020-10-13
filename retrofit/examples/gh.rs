@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::str::FromStr;
 
 use anyhow::Result;
@@ -6,7 +7,7 @@ use derive_more::Display;
 use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
 
-use retrofit::{args, default_headers, get, service};
+use retrofit::{args, default_headers, get, service, Service};
 
 #[derive(Debug, Clone, Display, Serialize, Deserialize)]
 #[display(
@@ -53,12 +54,39 @@ impl FromStr for RepoType {
     }
 }
 
-#[service(base_url = "https://api.github.com/")]
-#[default_headers(accept = "application/vnd.github.v3+json")]
-pub trait GithubService {
+#[derive(Debug, Display, Serialize, Deserialize)]
+#[display(fmt = "{} {}", name, commit)]
+pub struct Tag {
+    pub name: String,
+    pub commit: Commit,
+    pub zipball_url: String,
+    pub tarball_url: String,
+    pub node_id: String,
+}
+
+#[derive(Debug, Display, Serialize, Deserialize)]
+#[display(fmt = "#{}", sha)]
+pub struct Commit {
+    pub sha: String,
+    pub url: String,
+}
+
+#[service(base_url = "https://api.github.com")]
+#[default_headers(accept = "application/vnd.github.v3+json", user_agent = "gh/1.0")]
+pub trait GithubService: Service {
     #[get("users/{username}/repos?type={ty}")]
     #[args(ty = ty.map(|ty| ty.to_string()).unwrap_or_default())]
     fn list_repo(&self, username: &str, ty: Option<RepoType>) -> Result<Vec<Repo>, Self::Error>;
+
+    #[get("repos/{owner}/{repo}/languages")]
+    fn list_repo_languages(
+        &self,
+        owner: &str,
+        repo: &str,
+    ) -> Result<HashMap<String, usize>, Self::Error>;
+
+    #[get("repos/{owner}/{repo}/tags")]
+    fn list_repo_tags(&self, owner: &str, repo: &str) -> Result<Vec<Tag>, Self::Error>;
 }
 
 mod opt {
@@ -141,6 +169,10 @@ mod opt {
             /// Give the specified user.
             username: String,
         },
+        /// List repository languages
+        Languages { owner: String, repo: String },
+        /// List repository tags
+        Tags { owner: String, repo: String },
     }
 }
 
@@ -157,10 +189,22 @@ fn main() -> Result<()> {
         Cmd::Repo {
             repo: Repo::List { username, r#type },
         } => {
-            let repos = github.list_repo(&username, r#type)?;
-
-            for repo in repos {
+            for repo in github.list_repo(&username, r#type)? {
                 println!("{}", repo);
+            }
+        }
+        Cmd::Repo {
+            repo: Repo::Languages { owner, repo },
+        } => {
+            for (lang, bytes) in github.list_repo_languages(&owner, &repo)? {
+                println!("{}: {}", lang, bytes);
+            }
+        }
+        Cmd::Repo {
+            repo: Repo::Tags { owner, repo },
+        } => {
+            for tag in github.list_repo_tags(&owner, &repo)? {
+                println!("{}", tag);
             }
         }
         _ => unimplemented!(),
