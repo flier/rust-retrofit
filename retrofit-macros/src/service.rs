@@ -59,6 +59,7 @@ pub fn service(args: Args, mut item: ItemTrait) -> Result<TokenStream> {
 
             impl retrofit::Service for #client_name {
                 type Error = reqwest::Error;
+                type Body = reqwest::blocking::Body;
             }
 
             impl #impl_generics #trait_name for #client_name #ty_generics #where_clause {
@@ -249,6 +250,12 @@ impl Request {
             } else if attr.path.is_ident("put") || attr.path == parse_quote! { retrofit::put } {
                 return attr.parse_args().map(|path| Request {
                     method: http::Method::PUT,
+                    path,
+                    args,
+                });
+            } else if attr.path.is_ident("patch") || attr.path == parse_quote! { retrofit::patch } {
+                return attr.parse_args().map(|path| Request {
+                    method: http::Method::PATCH,
                     path,
                     args,
                 });

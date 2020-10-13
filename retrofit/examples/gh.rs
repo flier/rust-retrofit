@@ -8,7 +8,7 @@ use derive_more::Display;
 use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
 
-use retrofit::{client, default_headers, get, request, service};
+use retrofit::{client, default_headers, delete, get, patch, put, request, service};
 
 #[derive(Debug, Clone, Display, Serialize, Deserialize)]
 #[display(
@@ -49,6 +49,17 @@ pub struct Commit {
     pub url: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Topics {
+    pub names: Vec<String>,
+}
+
+impl From<&Topics> for reqwest::blocking::Body {
+    fn from(topics: &Topics) -> Self {
+        serde_json::to_string(topics).unwrap().into()
+    }
+}
+
 #[service(base_url = "https://api.github.com")]
 #[client(
     connect_timeout = Some(Duration::from_secs(5)),
@@ -61,10 +72,19 @@ pub trait GithubService {
     #[get("/repos/{owner}/{repo}")]
     fn get_repo(&self, owner: &str, repo: &str) -> Repo;
 
+    /// Update a repository
+    #[patch("/repos/{owner}/{repo}")]
+    #[request(body)]
+    fn update_repo(&self, owner: &str, repo: &str, body: &UpdateRepo) -> Repo;
+
+    /// Delete a repository
+    #[delete("/repos/{owner}/{repo}")]
+    fn delete_repo(&self, owner: &str, repo: &str) -> ();
+
     /// List repositories for a user
     #[get("/users/{username}/repos")]
     #[request(query)]
-    fn list_repo(&self, username: &str, query: &ListRepoQuery) -> Vec<Repo>;
+    fn list_repo(&self, username: &str, query: &ListRepo) -> Vec<Repo>;
 
     /// List repository languages
     #[get("/repos/{owner}/{repo}/languages")]
@@ -72,8 +92,17 @@ pub trait GithubService {
 
     /// List repository tags
     #[get("/repos/{owner}/{repo}/tags")]
-    #[request(query)]
-    fn list_repo_tags(&self, owner: &str, repo: &str, query: &Pagination) -> Vec<Tag>;
+    #[request(query = pagination)]
+    fn list_repo_tags(&self, owner: &str, repo: &str, pagination: &Pagination) -> Vec<Tag>;
+
+    /// Get all repository topics
+    #[get("/repos/{owner}/{repo}/topics")]
+    fn get_repo_topics(&self, owner: &str, repo: &str) -> Topics;
+
+    /// Replace all repository topics
+    #[put("/repos/{owner}/{repo}/topics")]
+    #[request(body = topics)]
+    fn replace_repo_topics(&self, owner: &str, repo: &str, topics: &Topics) -> Topics;
 }
 
 #[derive(Clone, Debug, Default, Serialize, StructOpt)]
@@ -88,13 +117,31 @@ pub struct Pagination {
 }
 
 #[derive(Clone, Debug, Default, Serialize)]
-pub struct ListRepoQuery {
+pub struct ListRepo {
     #[serde(rename = "type")]
     pub ty: Option<RepoType>,
     pub sort: Option<RepoSort>,
     pub direction: Option<Direction>,
     #[serde(flatten)]
     pub pagination: Pagination,
+}
+
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct UpdateRepo {
+    /// The name of the repository.
+    pub name: Option<String>,
+    /// A short description of the repository.
+    pub description: Option<String>,
+    /// A URL with more information about the repository.
+    pub homepage: Option<String>,
+    /// Either `true` to make the repository private or `false` to make it public.
+    pub private: Option<bool>,
+}
+
+impl From<&UpdateRepo> for reqwest::blocking::Body {
+    fn from(update: &UpdateRepo) -> Self {
+        serde_json::to_string(update).unwrap().into()
+    }
 }
 
 #[derive(Clone, Copy, Debug, Serialize)]
@@ -270,13 +317,15 @@ fn main() -> Result<()> {
                 sort,
                 direction,
             } => {
-                let query = ListRepoQuery {
-                    ty,
-                    sort,
-                    direction,
-                    pagination: opt.pagination,
-                };
-                for repo in github.list_repo(&username, &query)? {
+                for repo in github.list_repo(
+                    &username,
+                    &ListRepo {
+                        ty,
+                        sort,
+                        direction,
+                        pagination: opt.pagination,
+                    },
+                )? {
                     println!("{}", repo);
                 }
             }

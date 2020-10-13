@@ -11,4 +11,5 @@ pub trait AsyncCall<T>: Future<Output = T> {}
 
 pub trait Service {
     type Error: Error + Send + Sync;
+    type Body;
 }
