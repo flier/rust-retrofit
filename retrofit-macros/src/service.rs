@@ -17,6 +17,7 @@ lazy_static! {
 
 pub fn service(_attr: TokenStream, mut item: ItemTrait) -> Result<TokenStream> {
     ensure_trait_bound(&mut item.supertraits);
+    ensure_method_return_result(&mut item.items);
 
     let vis = &item.vis;
     let trait_name = &item.ident;
@@ -77,6 +78,30 @@ fn ensure_trait_bound(supertraits: &mut Punctuated<syn::TypeParamBound, token::A
         supertraits.push(syn::TypeParamBound::Trait(
             parse_quote! { retrofit::Service },
         ));
+    }
+}
+
+fn ensure_method_return_result<'a>(items: &'a mut [syn::TraitItem]) {
+    for item in items.iter_mut() {
+        match item {
+            syn::TraitItem::Method(method) if method.default.is_none() => match method.sig.output {
+                syn::ReturnType::Type(_, ref mut ty) => {
+                    let return_result = match ty.as_ref() {
+                        syn::Type::Path(syn::TypePath { path, .. }) if path.is_ident("Result") => {
+                            true
+                        }
+                        _ => false,
+                    };
+
+                    if !return_result {
+                        let return_type = ty.as_ref();
+                        *ty = Box::new(parse_quote! { Result<#return_type, Self::Error> })
+                    }
+                }
+                _ => {}
+            },
+            _ => {}
+        }
     }
 }
 
