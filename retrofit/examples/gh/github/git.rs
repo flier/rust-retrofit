@@ -1,8 +1,6 @@
-use derive_more::Display;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Display, Serialize, Deserialize)]
-#[display(fmt = "{} {}", name, commit)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Tag {
     pub name: String,
     pub commit: Commit,
@@ -11,8 +9,7 @@ pub struct Tag {
     pub node_id: String,
 }
 
-#[derive(Debug, Display, Serialize, Deserialize)]
-#[display(fmt = "#{}", sha)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Commit {
     pub sha: String,
     pub url: String,

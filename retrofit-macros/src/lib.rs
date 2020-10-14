@@ -1,6 +1,7 @@
 use proc_macro::TokenStream;
 use syn::{parse::Error as ParseError, parse_macro_input, DeriveInput};
 
+mod header;
 mod request;
 mod service;
 
@@ -46,7 +47,7 @@ pub fn body(item: TokenStream) -> TokenStream {
 
 #[proc_macro_attribute]
 pub fn default_headers(attr: TokenStream, item: TokenStream) -> TokenStream {
-    Output::process(request::default_headers(
+    Output::process(header::default_headers(
         syn::parse(attr).expect("headers"),
         syn::parse(item).expect("trait"),
     ))
@@ -134,7 +135,7 @@ pub fn args(attr: TokenStream, item: TokenStream) -> TokenStream {
 
 #[proc_macro_attribute]
 pub fn headers(attr: TokenStream, item: TokenStream) -> TokenStream {
-    Output::process(request::headers(
+    Output::process(header::headers(
         syn::parse(attr).expect("headers"),
         syn::parse(item).expect("trait fn"),
     ))

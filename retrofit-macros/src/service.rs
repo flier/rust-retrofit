@@ -3,14 +3,12 @@ use lazy_static::lazy_static;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{quote, ToTokens};
 use regex::Regex;
-use syn::{
-    parse::{Parse, ParseStream},
-    parse_quote,
-    punctuated::Punctuated,
-    Attribute, DeriveInput, ItemTrait, LitByteStr, LitStr, Result, Token,
-};
+use syn::{parse_quote, punctuated::Punctuated, DeriveInput, ItemTrait, LitByteStr, Result, Token};
 
-use crate::request::{Arg, Args, Request};
+use crate::{
+    header::Headers,
+    request::{Arg, Args, Request},
+};
 
 lazy_static! {
     static ref RE_FMT_ARG: Regex = Regex::new(r"\{(?P<name>\w+)(:[^\}]+)?\}").unwrap();
@@ -59,8 +57,12 @@ pub fn service(args: Args, mut item: ItemTrait) -> Result<TokenStream> {
 
     let methods = generate_methods(&item.items);
 
-    let default_headers = extract_headers("default_headers", &item.attrs)?;
-    let default_headers = generate_header_map(default_headers);
+    let default_headers = Headers::extract("default_headers", &item.attrs)?;
+    let default_headers = if default_headers.is_empty() {
+        None
+    } else {
+        Some(quote! { .default_headers(#default_headers) })
+    };
 
     let (impl_generics, ty_generics, where_clause) = item.generics.split_for_impl();
     let impl_fn = quote! {
@@ -81,15 +83,15 @@ pub fn service(args: Args, mut item: ItemTrait) -> Result<TokenStream> {
 
             static APP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
-            let mut builder = reqwest::blocking::Client::builder();
+            let mut builder = reqwest::blocking::Client::builder()
+                .user_agent(APP_USER_AGENT)
+                #default_headers
+                #(#client_options)*;
+
+            tracing::trace!(?builder);
 
             #client_name {
-                client: builder
-                    .user_agent(APP_USER_AGENT)
-                    .default_headers(#default_headers)
-                    #(#client_options)*
-                    .build()
-                    .expect("client"),
+                client: builder.build().expect("client"),
                 #(#service_options)*
             }
         }
@@ -198,13 +200,11 @@ fn generate_methods<'a>(items: &'a [syn::TraitItem]) -> impl Iterator<Item = Tok
                 quote! { #(#args),* }
             };
 
-            let headers = match extract_headers("headers", &method.attrs) {
+            let headers = match Headers::extract("headers", &method.attrs) {
                 Ok(headers) => {
                     if headers.is_empty() {
                         None
                     } else {
-                        let headers = generate_header_map(headers);
-
                         Some(quote! {
                             req = req.headers(#headers);
                         })
@@ -238,75 +238,16 @@ fn generate_methods<'a>(items: &'a [syn::TraitItem]) -> impl Iterator<Item = Tok
                     let mut req = self.client.request(#http_method, &url);
                     #headers
                     #(#options)*
-                    //tracing::trace!("req: {:?}", req);
-                    let res = req.send()?;
-                    //tracing::trace!("res: {:?}", res);
+                    tracing::trace!(?req);
+                    let mut res = req.send()?;
+                    tracing::trace!(?res);
+                    // tracing::trace!(text = %{
+                    //     let mut buf: Vec<u8> = vec![];
+                    //     res.copy_to(&mut buf)?;
+                    //     String::from_utf8(buf).unwrap()
+                    // });
                     res.json()
                 }
             }
         })
-}
-
-fn extract_headers<'a>(
-    name: &str,
-    attrs: &'a [Attribute],
-) -> Result<Punctuated<Header, Token![,]>> {
-    let id = Ident::new(name, Span::call_site());
-    let path = parse_quote! { retrofit::#id };
-
-    attrs
-        .iter()
-        .filter(|attr| attr.path.is_ident(name) || attr.path == path)
-        .map(|attr| {
-            attr.parse_args_with(Punctuated::parse_terminated)
-                .map(|args| args.into_pairs())
-        })
-        .collect::<Result<Vec<_>>>()
-        .map(|args| args.into_iter().flatten().collect())
-}
-
-#[derive(Clone, Debug)]
-pub struct Headers(Punctuated<Header, Token![,]>);
-
-impl Parse for Headers {
-    fn parse(input: ParseStream<'_>) -> Result<Self> {
-        Punctuated::parse_terminated(input).map(Headers)
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct Header {
-    pub name: Ident,
-    pub eq_token: Token![=],
-    pub value: LitStr,
-}
-
-impl Parse for Header {
-    fn parse(input: ParseStream<'_>) -> Result<Self> {
-        Ok(Header {
-            name: input.parse()?,
-            eq_token: input.parse()?,
-            value: input.parse()?,
-        })
-    }
-}
-
-fn generate_header_map(headers: impl IntoIterator<Item = Header>) -> TokenStream {
-    let insert_headers = headers.into_iter().map(|header| {
-        let name = LitStr::new(&header.name.to_string().to_dashed(), Span::call_site());
-        let value = header.value;
-        quote! {
-            headers.insert(
-                #name,
-                reqwest::header::HeaderValue::from_static(#value)
-            );
-        }
-    });
-    quote! {
-        {
-            let mut headers = reqwest::header::HeaderMap::new();
-            #(#insert_headers)*
-            headers
-        }
-    }
 }

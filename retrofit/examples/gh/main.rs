@@ -93,6 +93,10 @@ pub enum Repo {
     Languages { owner: String, repo: String },
     /// List repository tags
     Tags { owner: String, repo: String },
+    /// List repository teams
+    Teams { owner: String, repo: String },
+    /// Get all repository topics
+    Topics { owner: String, repo: String },
 }
 
 fn main() -> Result<()> {
@@ -119,7 +123,10 @@ fn main() -> Result<()> {
                         pagination: opt.pagination,
                     },
                 )? {
-                    println!("{}", repo);
+                    println!(
+                        "{:40} watch: {:>4}, star: {:>4}, fork: {:>4}",
+                        repo.name, repo.watchers_count, repo.stargazers_count, repo.forks_count
+                    );
                 }
             }
             Repo::Languages { owner, repo } => {
@@ -129,8 +136,18 @@ fn main() -> Result<()> {
             }
             Repo::Tags { owner, repo } => {
                 for tag in github.list_repo_tags(&owner, &repo, &opt.pagination)? {
-                    println!("{}", tag);
+                    println!("{}\t#{}", tag.name, &tag.commit.sha[..8]);
                 }
+            }
+            Repo::Teams { owner, repo } => {
+                for team in github.list_repo_teams(&owner, &repo, &opt.pagination)? {
+                    println!("{}\t{}", team.name, team.description.unwrap_or_default());
+                }
+            }
+            Repo::Topics { owner, repo } => {
+                let topics = github.get_repo_topics(&owner, &repo)?;
+
+                println!("{}", topics.names.join(","));
             }
             _ => unimplemented!(),
         },

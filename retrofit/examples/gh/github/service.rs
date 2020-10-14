@@ -8,7 +8,10 @@ use structopt::StructOpt;
 
 use retrofit::*;
 
-use crate::github::{Repo, Tag, Topics};
+use crate::github::{Repo, Tag, Team, Topics};
+
+const GITHUB_JSON_V3: &str = "application/vnd.github.v3+json";
+const GITHUB_JSON_PREVIEW: &str = "application/vnd.github.mercy-preview+json";
 
 #[service(base_url = "https://api.github.com")]
 #[client(
@@ -16,7 +19,7 @@ use crate::github::{Repo, Tag, Topics};
     no_gzip,
     user_agent = "gh/1.0",
 )]
-#[default_headers(accept = "application/vnd.github.v3+json")]
+#[default_headers(accept = GITHUB_JSON_V3)]
 pub trait GithubService {
     /// Get a repository
     #[get("/repos/{owner}/{repo}")]
@@ -45,8 +48,14 @@ pub trait GithubService {
     #[request(query = pagination)]
     fn list_repo_tags(&self, owner: &str, repo: &str, pagination: &Pagination) -> Vec<Tag>;
 
+    /// List repository teams
+    #[get("/repos/{owner}/{repo}/teams")]
+    #[request(query = pagination)]
+    fn list_repo_teams(&self, owner: &str, repo: &str, pagination: &Pagination) -> Vec<Team>;
+
     /// Get all repository topics
     #[get("/repos/{owner}/{repo}/topics")]
+    #[headers(accept = GITHUB_JSON_PREVIEW)]
     fn get_repo_topics(&self, owner: &str, repo: &str) -> Topics;
 
     /// Replace all repository topics

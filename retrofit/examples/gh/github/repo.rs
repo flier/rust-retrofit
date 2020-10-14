@@ -1,19 +1,12 @@
 use chrono::{DateTime, Utc};
-use derive_more::Display;
 use serde::{Deserialize, Serialize};
 
 use retrofit::Body;
 
-#[derive(Debug, Clone, Display, Serialize, Deserialize)]
-#[display(
-    fmt = "{:40} watch: {:>4}, star: {:>4}, fork: {:>4}",
-    name,
-    watchers_count,
-    stargazers_count,
-    forks_count
-)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Repo {
     pub id: usize,
+    pub node_id: String,
     pub name: String,
     pub full_name: String,
     pub private: bool,
@@ -29,4 +22,14 @@ pub struct Repo {
 #[derive(Debug, Serialize, Deserialize, Body)]
 pub struct Topics {
     pub names: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Team {
+    pub id: usize,
+    pub node_id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub url: String,
+    pub html_url: String,
 }

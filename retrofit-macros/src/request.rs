@@ -8,10 +8,8 @@ use syn::{
     parse_quote,
     punctuated::Punctuated,
     spanned::Spanned,
-    token, Attribute, Error, Expr, Ident, ItemTrait, LitStr, Result, Token, TraitItemMethod,
+    token, Attribute, Error, Expr, Ident, LitStr, Result, Token, TraitItemMethod,
 };
-
-use crate::service::Headers;
 
 pub fn request(_attr: LitStr, item: TraitItemMethod) -> Result<TokenStream> {
     Ok(item.into_token_stream())
@@ -22,14 +20,6 @@ pub fn http(_attr: Http, item: TraitItemMethod) -> Result<TokenStream> {
 }
 
 pub fn args(_attr: Args, item: TraitItemMethod) -> Result<TokenStream> {
-    Ok(item.into_token_stream())
-}
-
-pub fn headers(_attr: Headers, item: TraitItemMethod) -> Result<TokenStream> {
-    Ok(item.into_token_stream())
-}
-
-pub fn default_headers(_attr: Headers, item: ItemTrait) -> Result<TokenStream> {
     Ok(item.into_token_stream())
 }
 
