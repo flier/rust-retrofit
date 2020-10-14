@@ -27,8 +27,8 @@ pub trait GithubService {
 
     /// Update a repository
     #[patch("/repos/{owner}/{repo}")]
-    #[request(body)]
-    fn update_repo(&self, owner: &str, repo: &str, body: UpdateRepo) -> Repo;
+    #[request(json = update)]
+    fn update_repo(&self, owner: &str, repo: &str, update: &UpdateRepo) -> Repo;
 
     /// Delete a repository
     #[delete("/repos/{owner}/{repo}")]
@@ -60,11 +60,11 @@ pub trait GithubService {
 
     /// Replace all repository topics
     #[put("/repos/{owner}/{repo}/topics")]
-    #[request(body = topics)]
-    fn replace_repo_topics(&self, owner: &str, repo: &str, topics: Topics) -> Topics;
+    #[request(json = topics)]
+    fn replace_repo_topics(&self, owner: &str, repo: &str, topics: &Topics) -> Topics;
 }
 
-#[derive(Clone, Debug, Default, Serialize, Body, StructOpt)]
+#[derive(Clone, Debug, Default, Serialize, StructOpt)]
 pub struct Pagination {
     /// Results per page (max 100)
     #[structopt(short = "c", long)]
@@ -75,7 +75,7 @@ pub struct Pagination {
     pub page: Option<usize>,
 }
 
-#[derive(Clone, Debug, Default, Serialize, Body)]
+#[derive(Clone, Debug, Default, Serialize)]
 pub struct ListRepo {
     #[serde(rename = "type")]
     pub ty: Option<RepoType>,
@@ -85,7 +85,7 @@ pub struct ListRepo {
     pub pagination: Pagination,
 }
 
-#[derive(Clone, Debug, Default, Serialize, Body)]
+#[derive(Clone, Debug, Default, Serialize)]
 pub struct UpdateRepo {
     /// The name of the repository.
     pub name: Option<String>,

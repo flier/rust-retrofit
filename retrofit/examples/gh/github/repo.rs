@@ -1,8 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use retrofit::Body;
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Repo {
     pub id: usize,
@@ -19,7 +17,7 @@ pub struct Repo {
     pub pushed_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Body)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Topics {
     pub names: Vec<String>,
 }

@@ -3,7 +3,7 @@ use lazy_static::lazy_static;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{quote, ToTokens};
 use regex::Regex;
-use syn::{parse_quote, punctuated::Punctuated, DeriveInput, ItemTrait, LitByteStr, Result, Token};
+use syn::{parse_quote, punctuated::Punctuated, ItemTrait, LitByteStr, Result, Token};
 
 use crate::{
     header::Headers,
@@ -16,18 +16,6 @@ lazy_static! {
 
 pub fn client(_args: Args, item: ItemTrait) -> Result<TokenStream> {
     Ok(item.into_token_stream())
-}
-
-pub fn body(item: DeriveInput) -> Result<TokenStream> {
-    let ty = &item.ident;
-
-    Ok(quote! {
-        impl From<#ty> for reqwest::blocking::Body {
-            fn from(item: #ty) -> Self {
-                serde_json::to_string(&item).unwrap().into()
-            }
-        }
-    })
 }
 
 pub fn service(args: Args, mut item: ItemTrait) -> Result<TokenStream> {
@@ -75,6 +63,7 @@ pub fn service(args: Args, mut item: ItemTrait) -> Result<TokenStream> {
             impl retrofit::Service for #client_name {
                 type Error = reqwest::Error;
                 type Body = reqwest::blocking::Body;
+                type Form = reqwest::blocking::multipart::Form;
             }
 
             impl #impl_generics #trait_name for #client_name #ty_generics #where_clause {
