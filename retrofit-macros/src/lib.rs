@@ -101,6 +101,14 @@ pub fn delete(attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
+pub fn options(attr: TokenStream, item: TokenStream) -> TokenStream {
+    Output::process(request::request(
+        syn::parse(attr).expect("path"),
+        syn::parse(item).expect("trait fn"),
+    ))
+}
+
+#[proc_macro_attribute]
 pub fn args(attr: TokenStream, item: TokenStream) -> TokenStream {
     Output::process(request::args(
         syn::parse(attr).expect("args"),

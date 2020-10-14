@@ -278,6 +278,14 @@ impl Request {
                     path,
                     args,
                 });
+            } else if attr.path.is_ident("options")
+                || attr.path == parse_quote! { retrofit::options }
+            {
+                return attr.parse_args().map(|path| Request {
+                    method: http::Method::OPTIONS,
+                    path,
+                    args,
+                });
             }
         }
 
