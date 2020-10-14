@@ -2,6 +2,8 @@ use chrono::{DateTime, Utc};
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
 
+use retrofit::Body;
+
 #[derive(Debug, Clone, Display, Serialize, Deserialize)]
 #[display(
     fmt = "{:40} watch: {:>4}, star: {:>4}, fork: {:>4}",
@@ -24,13 +26,7 @@ pub struct Repo {
     pub pushed_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Body)]
 pub struct Topics {
     pub names: Vec<String>,
-}
-
-impl From<&Topics> for reqwest::blocking::Body {
-    fn from(topics: &Topics) -> Self {
-        serde_json::to_string(topics).unwrap().into()
-    }
 }

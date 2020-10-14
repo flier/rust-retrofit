@@ -8,7 +8,7 @@ use syn::{
     parse_quote,
     punctuated::Punctuated,
     spanned::Spanned,
-    Attribute, Error, Expr, ItemTrait, LitStr, Result, Token, TraitItemMethod,
+    Attribute, DeriveInput, Error, Expr, ItemTrait, LitStr, Result, Token, TraitItemMethod,
 };
 
 lazy_static! {
@@ -17,6 +17,18 @@ lazy_static! {
 
 pub fn client(_args: Args, item: ItemTrait) -> Result<TokenStream> {
     Ok(item.into_token_stream())
+}
+
+pub fn body(item: DeriveInput) -> Result<TokenStream> {
+    let ty = &item.ident;
+
+    Ok(quote! {
+        impl From<#ty> for reqwest::blocking::Body {
+            fn from(item: #ty) -> Self {
+                serde_json::to_string(&item).unwrap().into()
+            }
+        }
+    })
 }
 
 pub fn service(args: Args, mut item: ItemTrait) -> Result<TokenStream> {

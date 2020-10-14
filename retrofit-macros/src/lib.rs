@@ -1,5 +1,5 @@
 use proc_macro::TokenStream;
-use syn::parse::Error as ParseError;
+use syn::{parse::Error as ParseError, parse_macro_input, DeriveInput};
 
 mod request;
 mod service;
@@ -37,6 +37,11 @@ pub fn client(attr: TokenStream, item: TokenStream) -> TokenStream {
         syn::parse(attr).expect("args"),
         syn::parse(item).expect("trait"),
     ))
+}
+
+#[proc_macro_derive(Body)]
+pub fn body(item: TokenStream) -> TokenStream {
+    Output::process(service::body(parse_macro_input!(item as DeriveInput)))
 }
 
 #[proc_macro_attribute]

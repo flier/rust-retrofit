@@ -6,7 +6,7 @@ use anyhow::Result;
 use serde::Serialize;
 use structopt::StructOpt;
 
-use retrofit::{client, default_headers, delete, get, patch, put, request, service};
+use retrofit::{client, default_headers, delete, get, patch, put, request, service, Body};
 
 use crate::github::{Repo, Tag, Topics};
 
@@ -25,7 +25,7 @@ pub trait GithubService {
     /// Update a repository
     #[patch("/repos/{owner}/{repo}")]
     #[request(body)]
-    fn update_repo(&self, owner: &str, repo: &str, body: &UpdateRepo) -> Repo;
+    fn update_repo(&self, owner: &str, repo: &str, body: UpdateRepo) -> Repo;
 
     /// Delete a repository
     #[delete("/repos/{owner}/{repo}")]
@@ -52,10 +52,10 @@ pub trait GithubService {
     /// Replace all repository topics
     #[put("/repos/{owner}/{repo}/topics")]
     #[request(body = topics)]
-    fn replace_repo_topics(&self, owner: &str, repo: &str, topics: &Topics) -> Topics;
+    fn replace_repo_topics(&self, owner: &str, repo: &str, topics: Topics) -> Topics;
 }
 
-#[derive(Clone, Debug, Default, Serialize, StructOpt)]
+#[derive(Clone, Debug, Default, Serialize, Body, StructOpt)]
 pub struct Pagination {
     /// Results per page (max 100)
     #[structopt(short = "c", long)]
@@ -66,7 +66,7 @@ pub struct Pagination {
     pub page: Option<usize>,
 }
 
-#[derive(Clone, Debug, Default, Serialize)]
+#[derive(Clone, Debug, Default, Serialize, Body)]
 pub struct ListRepo {
     #[serde(rename = "type")]
     pub ty: Option<RepoType>,
@@ -76,7 +76,7 @@ pub struct ListRepo {
     pub pagination: Pagination,
 }
 
-#[derive(Clone, Debug, Default, Serialize)]
+#[derive(Clone, Debug, Default, Serialize, Body)]
 pub struct UpdateRepo {
     /// The name of the repository.
     pub name: Option<String>,
@@ -86,12 +86,6 @@ pub struct UpdateRepo {
     pub homepage: Option<String>,
     /// Either `true` to make the repository private or `false` to make it public.
     pub private: Option<bool>,
-}
-
-impl From<&UpdateRepo> for reqwest::blocking::Body {
-    fn from(update: &UpdateRepo) -> Self {
-        serde_json::to_string(update).unwrap().into()
-    }
 }
 
 #[derive(Clone, Copy, Debug, Serialize)]
