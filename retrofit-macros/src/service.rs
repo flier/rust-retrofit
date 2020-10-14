@@ -7,9 +7,10 @@ use syn::{
     parse::{Parse, ParseStream},
     parse_quote,
     punctuated::Punctuated,
-    spanned::Spanned,
-    Attribute, DeriveInput, Error, Expr, ItemTrait, LitStr, Result, Token, TraitItemMethod,
+    Attribute, DeriveInput, ItemTrait, LitByteStr, LitStr, Result, Token,
 };
+
+use crate::request::{Arg, Args, Request};
 
 lazy_static! {
     static ref RE_FMT_ARG: Regex = Regex::new(r"\{(?P<name>\w+)(:[^\}]+)?\}").unwrap();
@@ -36,14 +37,14 @@ pub fn service(args: Args, mut item: ItemTrait) -> Result<TokenStream> {
     ensure_method_return_result(&mut item.items);
 
     let client_options =
-        extract_args("client", &item.attrs)?
+        Args::extract("client", &item.attrs)?
             .into_iter()
             .map(|Arg { ident, expr, .. }| {
                 quote! {
                     .#ident(#expr)
                 }
             });
-    let service_options = args.0.into_iter().flat_map(|Arg { ident, expr, .. }| {
+    let service_options = args.into_iter().flat_map(|Arg { ident, expr, .. }| {
         expr.map(|expr| {
             quote! {
                 #ident: #expr.into(),
@@ -151,6 +152,29 @@ fn generate_methods<'a>(items: &'a [syn::TraitItem]) -> impl Iterator<Item = Tok
         .map(|method| {
             let sig = &method.sig;
             let req = Request::extract(&method).expect("request");
+            let http_method = match req.method {
+                http::Method::GET
+                | http::Method::DELETE
+                | http::Method::HEAD
+                | http::Method::OPTIONS
+                | http::Method::PATCH
+                | http::Method::POST
+                | http::Method::TRACE
+                | http::Method::PUT => {
+                    let method = Ident::new(req.method.as_str(), Span::call_site());
+
+                    quote! {
+                        reqwest::Method::#method
+                    }
+                }
+                _ => {
+                    let method = LitByteStr::new(req.method.as_str().as_bytes(), Span::call_site());
+
+                    quote! {
+                        reqwest::Method::from_bytes(#method).expect("method")
+                    }
+                }
+            };
             let path = req.path;
             let args = {
                 let fmt = path.value();
@@ -189,7 +213,7 @@ fn generate_methods<'a>(items: &'a [syn::TraitItem]) -> impl Iterator<Item = Tok
                 Err(err) => Some(err.to_compile_error()),
             };
 
-            let options = extract_args("request", &method.attrs)
+            let options = Args::extract("request", &method.attrs)
                 .expect("request")
                 .into_iter()
                 .map(|Arg { ident, expr, .. }| {
@@ -211,148 +235,16 @@ fn generate_methods<'a>(items: &'a [syn::TraitItem]) -> impl Iterator<Item = Tok
                         base_url = self.base_url,
                         #args
                     );
-                    let mut req = self.client.get(&url);
+                    let mut req = self.client.request(#http_method, &url);
                     #headers
                     #(#options)*
-                    tracing::trace!("req: {:?}", req);
+                    //tracing::trace!("req: {:?}", req);
                     let res = req.send()?;
-                    tracing::trace!("res: {:?}", res);
+                    //tracing::trace!("res: {:?}", res);
                     res.json()
                 }
             }
         })
-}
-
-#[derive(Clone, Debug)]
-struct Request {
-    method: http::Method,
-    path: LitStr,
-    args: Punctuated<Arg, Token![,]>,
-}
-
-impl Request {
-    pub fn extract(method: &TraitItemMethod) -> Result<Self> {
-        let args = extract_args("args", &method.attrs)?;
-
-        for attr in &method.attrs {
-            if attr.path.is_ident("get") || attr.path == parse_quote! { retrofit::get } {
-                return attr.parse_args().map(|path| Request {
-                    method: http::Method::GET,
-                    path,
-                    args,
-                });
-            } else if attr.path.is_ident("head") || attr.path == parse_quote! { retrofit::head } {
-                return attr.parse_args().map(|path| Request {
-                    method: http::Method::HEAD,
-                    path,
-                    args,
-                });
-            } else if attr.path.is_ident("patch") || attr.path == parse_quote! { retrofit::patch } {
-                return attr.parse_args().map(|path| Request {
-                    method: http::Method::PATCH,
-                    path,
-                    args,
-                });
-            } else if attr.path.is_ident("post") || attr.path == parse_quote! { retrofit::post } {
-                return attr.parse_args().map(|path| Request {
-                    method: http::Method::POST,
-                    path,
-                    args,
-                });
-            } else if attr.path.is_ident("put") || attr.path == parse_quote! { retrofit::put } {
-                return attr.parse_args().map(|path| Request {
-                    method: http::Method::PUT,
-                    path,
-                    args,
-                });
-            } else if attr.path.is_ident("patch") || attr.path == parse_quote! { retrofit::patch } {
-                return attr.parse_args().map(|path| Request {
-                    method: http::Method::PATCH,
-                    path,
-                    args,
-                });
-            } else if attr.path.is_ident("delete") || attr.path == parse_quote! { retrofit::delete }
-            {
-                return attr.parse_args().map(|path| Request {
-                    method: http::Method::DELETE,
-                    path,
-                    args,
-                });
-            } else if attr.path.is_ident("options")
-                || attr.path == parse_quote! { retrofit::options }
-            {
-                return attr.parse_args().map(|path| Request {
-                    method: http::Method::OPTIONS,
-                    path,
-                    args,
-                });
-            }
-        }
-
-        Err(Error::new(
-            method.sig.span(),
-            format!(
-                "expected `get`, `post` or other request for the `{}` method",
-                method.sig.ident
-            ),
-        ))
-    }
-}
-
-fn extract_args(name: &str, attrs: &[Attribute]) -> Result<Punctuated<Arg, Token![,]>> {
-    let id = Ident::new(name, Span::call_site());
-    let path = parse_quote! { retrofit::#id };
-
-    attrs
-        .iter()
-        .filter(|attr| attr.path.is_ident(name) || attr.path == path)
-        .map(|attr| {
-            attr.parse_args_with(Punctuated::parse_terminated)
-                .map(|args| args.into_pairs())
-        })
-        .collect::<Result<Vec<_>>>()
-        .map(|args| args.into_iter().flatten().collect())
-}
-
-pub struct Args(Punctuated<Arg, Token![,]>);
-
-impl Parse for Args {
-    fn parse(input: ParseStream<'_>) -> Result<Self> {
-        Punctuated::parse_terminated(input).map(Args)
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct Arg {
-    pub ident: Ident,
-    pub eq_token: Option<Token![=]>,
-    pub expr: Option<Expr>,
-}
-
-impl Parse for Arg {
-    fn parse(input: ParseStream<'_>) -> Result<Self> {
-        let ident = input.parse()?;
-        let lookahead = input.lookahead1();
-        let (eq_token, expr) = if lookahead.peek(Token![=]) {
-            (Some(input.parse()?), Some(input.parse()?))
-        } else {
-            (None, None)
-        };
-
-        Ok(Arg {
-            ident,
-            eq_token,
-            expr,
-        })
-    }
-}
-
-impl ToTokens for Arg {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        self.ident.to_tokens(tokens);
-        self.eq_token.to_tokens(tokens);
-        self.expr.to_tokens(tokens);
-    }
 }
 
 fn extract_headers<'a>(

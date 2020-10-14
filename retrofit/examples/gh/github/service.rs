@@ -6,7 +6,7 @@ use anyhow::Result;
 use serde::Serialize;
 use structopt::StructOpt;
 
-use retrofit::{client, default_headers, delete, get, patch, put, request, service, Body};
+use retrofit::*;
 
 use crate::github::{Repo, Tag, Topics};
 
