@@ -113,6 +113,9 @@ fn ensure_method_return_result<'a>(items: &'a mut [syn::TraitItem]) {
     for item in items.iter_mut() {
         match item {
             syn::TraitItem::Method(method) if method.default.is_none() => match method.sig.output {
+                syn::ReturnType::Default => {
+                    method.sig.output = parse_quote! { -> Result<(), Self::Error> };
+                }
                 syn::ReturnType::Type(_, ref mut ty) => {
                     let return_result = match ty.as_ref() {
                         syn::Type::Path(syn::TypePath { path, .. }) if path.is_ident("Result") => {
@@ -126,7 +129,6 @@ fn ensure_method_return_result<'a>(items: &'a mut [syn::TraitItem]) {
                         *ty = Box::new(parse_quote! { Result<#return_type, Self::Error> })
                     }
                 }
-                _ => {}
             },
             _ => {}
         }

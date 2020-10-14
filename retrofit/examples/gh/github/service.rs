@@ -32,7 +32,7 @@ pub trait GithubService {
 
     /// Delete a repository
     #[delete("/repos/{owner}/{repo}")]
-    fn delete_repo(&self, owner: &str, repo: &str) -> ();
+    fn delete_repo(&self, owner: &str, repo: &str);
 
     /// List repositories for a user
     #[get("/users/{username}/repos")]
