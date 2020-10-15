@@ -103,9 +103,13 @@ fn ensure_trait_bound(supertraits: &mut Punctuated<syn::TypeParamBound, Token![+
     });
 
     if !bounded {
-        supertraits.push(syn::TypeParamBound::Trait(
-            parse_quote! { retrofit::Service },
-        ));
+        supertraits.push(syn::TypeParamBound::Trait(parse_quote! {
+            retrofit::Service<
+                Error = reqwest::Error,
+                Body = reqwest::blocking::Body,
+                Form = reqwest::blocking::multipart::Form,
+            >
+        }));
     }
 }
 
