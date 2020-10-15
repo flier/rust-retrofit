@@ -1,3 +1,5 @@
+#![allow(clippy::eval_order_dependence)]
+
 use std::result::Result as StdResult;
 
 use proc_macro2::{Span, TokenStream};

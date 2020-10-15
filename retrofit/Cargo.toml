@@ -12,6 +12,7 @@ retrofit-macros = { version = "0.1", path = "../retrofit-macros" }
 
 [dev-dependencies]
 anyhow = "1.0"
+bytes = "0.5"
 tracing-subscriber = "0.2"
 reqwest = { version = "0.10", features = ["blocking", "json"] }
 serde = { version = "1.0", features = ["derive"] }

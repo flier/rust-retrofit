@@ -3,6 +3,7 @@ use syn::parse::Error as ParseError;
 
 mod header;
 mod request;
+mod response;
 mod service;
 
 trait Output {
@@ -48,7 +49,6 @@ pub fn default_headers(attr: TokenStream, item: TokenStream) -> TokenStream {
     ))
 }
 
-/// Make a GET request.
 #[proc_macro_attribute]
 pub fn get(attr: TokenStream, item: TokenStream) -> TokenStream {
     Output::process(request::request(
@@ -147,6 +147,14 @@ pub fn headers(attr: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn request(attr: TokenStream, item: TokenStream) -> TokenStream {
     Output::process(request::args(
+        syn::parse(attr).expect("args"),
+        syn::parse(item).expect("trait fn"),
+    ))
+}
+
+#[proc_macro_attribute]
+pub fn response(attr: TokenStream, item: TokenStream) -> TokenStream {
+    Output::process(response::response(
         syn::parse(attr).expect("args"),
         syn::parse(item).expect("trait fn"),
     ))

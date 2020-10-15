@@ -83,7 +83,7 @@ impl ToTokens for Headers {
                         reqwest::header::HeaderValue::from_static(#value)
                     }
                 }
-                value @ _ => {
+                value => {
                     quote! {
                         reqwest::header::HeaderValue::from_maybe_shared(#value).expect("header value")
                     }

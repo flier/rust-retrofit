@@ -8,6 +8,7 @@ use syn::{parse_quote, punctuated::Punctuated, ItemTrait, LitByteStr, Result, To
 use crate::{
     header::Headers,
     request::{Arg, Args, Request},
+    response,
 };
 
 lazy_static! {
@@ -113,7 +114,7 @@ fn ensure_trait_bound(supertraits: &mut Punctuated<syn::TypeParamBound, Token![+
     }
 }
 
-fn ensure_method_return_result<'a>(items: &'a mut [syn::TraitItem]) {
+fn ensure_method_return_result(items: &mut [syn::TraitItem]) {
     for item in items.iter_mut() {
         match item {
             syn::TraitItem::Method(method) if method.default.is_none() => match method.sig.output {
@@ -200,28 +201,36 @@ fn generate_methods<'a>(items: &'a [syn::TraitItem]) -> impl Iterator<Item = Tok
                     if headers.is_empty() {
                         None
                     } else {
-                        Some(quote! {
-                            req = req.headers(#headers);
-                        })
+                        Some(quote! { .headers(#headers) })
                     }
                 }
                 Err(err) => Some(err.to_compile_error()),
             };
 
-            let options = Args::extract("request", &method.attrs)
-                .expect("request")
-                .into_iter()
-                .map(|Arg { ident, expr, .. }| {
-                    if let Some(expr) = expr {
-                        quote! {
-                            req = req.#ident(#expr);
+            let encode_request = {
+                let options = Args::extract("request", &method.attrs)
+                    .expect("request")
+                    .into_iter()
+                    .map(|Arg { ident, expr, .. }| {
+                        if let Some(expr) = expr {
+                            quote! { .#ident(#expr) }
+                        } else {
+                            quote! { .#ident(#ident) }
                         }
-                    } else {
-                        quote! {
-                            req = req.#ident(#ident);
-                        }
-                    }
-                });
+                    });
+
+                quote! {
+                    self.client.request(#http_method, &url)
+                        #headers
+                        #(#options)*
+                }
+            };
+
+            let decode_response = match response::extract(&method.attrs) {
+                Ok(Some(decode)) => quote! { res.#decode },
+                Ok(None) => quote! { res.json() },
+                Err(err) => err.to_compile_error(),
+            };
 
             quote! {
                 #sig {
@@ -230,18 +239,16 @@ fn generate_methods<'a>(items: &'a [syn::TraitItem]) -> impl Iterator<Item = Tok
                         base_url = self.base_url,
                         #args
                     );
-                    let mut req = self.client.request(#http_method, &url);
-                    #headers
-                    #(#options)*
+                    let req = #encode_request;
                     tracing::trace!(?req);
-                    let mut res = req.send()?;
+                    let res = req.send()?;
                     tracing::trace!(?res);
                     // tracing::trace!(text = %{
                     //     let mut buf: Vec<u8> = vec![];
                     //     res.copy_to(&mut buf)?;
                     //     String::from_utf8(buf).unwrap()
                     // });
-                    res.json()
+                    #decode_response
                 }
             }
         })

@@ -1,5 +1,25 @@
 pub use retrofit_core::{Call, Service};
-pub use retrofit_macros::{args, client, delete, get, options, patch, post, put, service, trace};
+pub use retrofit_macros::{args, client, delete, options, patch, post, put, service, trace};
+
+/// Make a GET request.
+///
+/// # Example
+///
+/// ```
+/// # use retrofit::{service, get, response};
+/// #[service(base_url = "http://httpbin.org")]
+/// pub trait HttpBin {
+///     #[get("/base64/{value}")]
+///     #[response(text())]
+///     fn base64(&self, value: &str) -> String;
+/// }
+///
+/// # fn main() -> reqwest::Result<()> {
+/// let res = http_bin().base64("SFRUUEJJTiBpcyBhd2Vzb21l")?;
+/// assert_eq!(res, "HTTPBIN is awesome");
+/// # Ok(()) }
+/// ```
+pub use retrofit_macros::get;
 
 /// Use a custom HTTP verb for a request.
 ///
@@ -212,3 +232,103 @@ pub use retrofit_macros::headers;
 /// # Ok(()) }
 /// ```
 pub use retrofit_macros::request;
+
+/// Decode response to a submitted request.
+///
+/// **Notes**: By default, attempts are made to decode the returned content using the JSON encoding.
+///
+/// # JSON
+///
+/// Try and deserialize the response body as JSON using serde.
+///
+/// ## Example
+///
+/// ```
+/// # use retrofit::{service, get, response};
+/// # use serde::{Deserialize, Serialize};
+/// #[derive(Debug, Clone, Deserialize)]
+/// pub struct Ip {
+///     origin: String,
+/// }
+///
+/// #[service(base_url = "http://httpbin.org")]
+/// pub trait HttpBin {
+///     #[get("/ip")]
+///     #[response(json())]
+///     fn ip(&self) -> Ip;
+/// }
+///
+/// # fn main() -> reqwest::Result<()> {
+/// let ip = http_bin().ip()?;
+/// assert!(!ip.origin.is_empty());
+/// # Ok(()) }
+/// ```
+///
+/// # Text
+///
+/// Use `text` to get the response text.
+///
+/// This method decodes the response body with BOM sniffing
+/// and with malformed sequences replaced with the REPLACEMENT CHARACTER.
+/// Encoding is determinated from the charset parameter of `Content-Type` header, and defaults to utf-8 if not presented.
+///
+/// ## Example
+///
+/// ```
+/// # use retrofit::{service, get, response};
+/// #[service(base_url = "http://httpbin.org")]
+/// pub trait HttpBin {
+///     #[get("/base64/{value}")]
+///     #[response(text())]
+///     fn base64(&self, value: &str) -> String;
+/// }
+///
+/// # fn main() -> reqwest::Result<()> {
+/// let res = http_bin().base64("SFRUUEJJTiBpcyBhd2Vzb21l")?;
+/// assert_eq!(res, "HTTPBIN is awesome");
+/// # Ok(()) }
+/// ```
+///
+/// # Text with encoding
+///
+/// Use `text_with_charset` to get the response text given a specific encoding.
+///
+/// ## Example
+///
+/// ```
+/// # use retrofit::{service, get, response};
+/// #[service(base_url = "http://httpbin.org")]
+/// pub trait HttpBin {
+///     #[get("/encoding/utf8")]
+///     #[response(text_with_charset("utf-8"))]
+///     fn utf8_demo(&self) -> String;
+/// }
+///
+/// # fn main() -> reqwest::Result<()> {
+/// let res = http_bin().utf8_demo()?;
+/// assert!(!res.is_empty());
+/// # Ok(()) }
+/// ```
+///
+/// # Binary
+///
+/// Use `bytes()` to get the full response body as `Bytes`.
+///
+/// ## Example
+///
+/// ```
+/// # use retrofit::{service, get, headers, response};
+/// #[service(base_url = "http://httpbin.org")]
+/// pub trait HttpBin {
+///     #[get("/bytes/{len}")]
+///     #[headers(accept = "accept: application/octet-stream")]
+///     #[response(bytes())]
+///     fn bytes(&self, len: usize) -> bytes::Bytes;
+/// }
+///
+/// # fn main() -> reqwest::Result<()> {
+/// let res = http_bin().bytes(8)?;
+/// assert_eq!(res.len(), 8);
+/// # Ok(()) }
+/// ```
+pub use retrofit_macros::response;
