@@ -19,3 +19,5 @@ lazy_static = "1.4"
 proc-macro2 = "1.0"
 syn = { version = "1.0", features = ["full"] }
 quote = "1.0"
+
+retrofit-reqwest = { version = "0.1", path = "../retrofit-reqwest", optional = true }
