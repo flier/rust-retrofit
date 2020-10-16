@@ -3,5 +3,4 @@ members = [
     "retrofit",
     "retrofit-core",
     "retrofit-macros",
-    "retrofit-reqwest",
 ]

@@ -9,10 +9,6 @@ edition = "2018"
 [lib]
 proc-macro = true
 
-[features]
-default = []
-reqwest-client = ["retrofit-reqwest"]
-
 [dependencies]
 tracing = "0.1"
 case = "1.0"
@@ -23,5 +19,3 @@ lazy_static = "1.4"
 proc-macro2 = "1.0"
 syn = { version = "1.0", features = ["full"] }
 quote = "1.0"
-
-retrofit-reqwest = { version = "0.1", path = "../retrofit-reqwest", optional = true }

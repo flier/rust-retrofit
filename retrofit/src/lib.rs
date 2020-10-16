@@ -1,8 +1,26 @@
 pub use retrofit_core::{Call, Service};
 pub use retrofit_macros::{args, client, delete, options, patch, post, put, service, trace};
-#[doc(hidden)]
-#[cfg(feature = "reqwest-client")]
-pub use retrofit_reqwest::*;
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "reqwest-client")] {
+        #[doc(hidden)]
+        pub extern crate reqwest;
+
+        pub type Error = reqwest::Error;
+        pub type Result<T> = reqwest::Result<T>;
+        pub type Method = reqwest::Method;
+        pub type HeaderMap = reqwest::header::HeaderMap;
+        pub type HeaderValue = reqwest::header::HeaderValue;
+
+        pub mod blocking {
+            pub type Client = reqwest::blocking::Client;
+            pub type Body = reqwest::blocking::Body;
+            pub mod multipart {
+                pub type Form = reqwest::blocking::multipart::Form;
+            }
+        }
+    }
+}
 
 /// Make a GET request.
 ///
