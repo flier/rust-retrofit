@@ -57,14 +57,14 @@ pub fn service(args: Args, mut item: ItemTrait) -> Result<TokenStream> {
     let impl_fn = quote! {
         #vis fn #fn_name() -> impl #trait_name {
             struct #client_name {
-                client: reqwest::blocking::Client,
+                client: retrofit::blocking::Client,
                 base_url: String,
             }
 
             impl retrofit::Service for #client_name {
-                type Error = reqwest::Error;
-                type Body = reqwest::blocking::Body;
-                type Form = reqwest::blocking::multipart::Form;
+                type Error = retrofit::Error;
+                type Body = retrofit::blocking::Body;
+                type Form = retrofit::blocking::multipart::Form;
             }
 
             impl #impl_generics #trait_name for #client_name #ty_generics #where_clause {
@@ -73,7 +73,7 @@ pub fn service(args: Args, mut item: ItemTrait) -> Result<TokenStream> {
 
             static APP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
-            let mut builder = reqwest::blocking::Client::builder()
+            let mut builder = retrofit::blocking::Client::builder()
                 .user_agent(APP_USER_AGENT)
                 #default_headers
                 #(#client_options)*;
@@ -106,9 +106,9 @@ fn ensure_trait_bound(supertraits: &mut Punctuated<syn::TypeParamBound, Token![+
     if !bounded {
         supertraits.push(syn::TypeParamBound::Trait(parse_quote! {
             retrofit::Service<
-                Error = reqwest::Error,
-                Body = reqwest::blocking::Body,
-                Form = reqwest::blocking::multipart::Form,
+                Error = retrofit::Error,
+                Body = retrofit::blocking::Body,
+                Form = retrofit::blocking::multipart::Form,
             >
         }));
     }
@@ -162,14 +162,14 @@ fn generate_methods<'a>(items: &'a [syn::TraitItem]) -> impl Iterator<Item = Tok
                     let method = Ident::new(req.method.as_str(), Span::call_site());
 
                     quote! {
-                        reqwest::Method::#method
+                        retrofit::Method::#method
                     }
                 }
                 _ => {
                     let method = LitByteStr::new(req.method.as_str().as_bytes(), Span::call_site());
 
                     quote! {
-                        reqwest::Method::from_bytes(#method).expect("method")
+                        retrofit::Method::from_bytes(#method).expect("method")
                     }
                 }
             };

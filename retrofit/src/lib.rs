@@ -1,5 +1,8 @@
 pub use retrofit_core::{Call, Service};
 pub use retrofit_macros::{args, client, delete, options, patch, post, put, service, trace};
+#[doc(hidden)]
+#[cfg(feature = "reqwest-client")]
+pub use retrofit_reqwest::*;
 
 /// Make a GET request.
 ///
@@ -14,7 +17,7 @@ pub use retrofit_macros::{args, client, delete, options, patch, post, put, servi
 ///     fn base64(&self, value: &str) -> String;
 /// }
 ///
-/// # fn main() -> reqwest::Result<()> {
+/// # fn main() -> retrofit::Result<()> {
 /// let res = http_bin().base64("SFRUUEJJTiBpcyBhd2Vzb21l")?;
 /// assert_eq!(res, "HTTPBIN is awesome");
 /// # Ok(()) }
@@ -88,7 +91,7 @@ pub use retrofit_macros::headers;
 ///     fn get<T: Serialize + ?Sized>(&self, query: &T) -> serde_json::Value;
 /// }
 ///
-/// # fn main() -> reqwest::Result<()> {
+/// # fn main() -> retrofit::Result<()> {
 /// let res = http_bin().get(&[("lang", "rust")])?;
 /// assert_eq!(res["args"]["lang"], "rust");
 /// # Ok(()) }
@@ -111,7 +114,7 @@ pub use retrofit_macros::headers;
 ///     fn post(&self, data: &HashMap<&str, &str>) -> serde_json::Value;
 /// }
 ///
-/// # fn main() -> reqwest::Result<()> {
+/// # fn main() -> retrofit::Result<()> {
 /// let mut params = HashMap::new();
 /// params.insert("lang", "rust");
 ///
@@ -138,7 +141,7 @@ pub use retrofit_macros::headers;
 ///     fn post(&self, data: &HashMap<&str, &str>) -> serde_json::Value;
 /// }
 ///
-/// # fn main() -> reqwest::Result<()> {
+/// # fn main() -> retrofit::Result<()> {
 /// let mut params = HashMap::new();
 /// params.insert("lang", "rust");
 ///
@@ -164,7 +167,7 @@ pub use retrofit_macros::headers;
 ///     fn post<T: Into<Self::Body>>(&self, data: T) -> serde_json::Value;
 /// }
 ///
-/// # fn main() -> reqwest::Result<()> {
+/// # fn main() -> retrofit::Result<()> {
 /// let res = http_bin().post("from a &str!")?;
 /// assert_eq!(res["data"], "from a &str!");
 /// # Ok(()) }
@@ -197,7 +200,7 @@ pub use retrofit_macros::headers;
 ///     fn post<T: Into<Self::Body>>(&self, data: T) -> serde_json::Value;
 /// }
 ///
-/// # fn main() -> reqwest::Result<()> {
+/// # fn main() -> retrofit::Result<()> {
 /// let bytes: Vec<u8> = vec![1, 10, 100];
 /// let res = http_bin().post(bytes)?;
 /// assert_eq!(res["data"].as_str().unwrap(), "\x01\x0a\x64");
@@ -258,7 +261,7 @@ pub use retrofit_macros::request;
 ///     fn ip(&self) -> Ip;
 /// }
 ///
-/// # fn main() -> reqwest::Result<()> {
+/// # fn main() -> retrofit::Result<()> {
 /// let ip = http_bin().ip()?;
 /// assert!(!ip.origin.is_empty());
 /// # Ok(()) }
@@ -283,7 +286,7 @@ pub use retrofit_macros::request;
 ///     fn base64(&self, value: &str) -> String;
 /// }
 ///
-/// # fn main() -> reqwest::Result<()> {
+/// # fn main() -> retrofit::Result<()> {
 /// let res = http_bin().base64("SFRUUEJJTiBpcyBhd2Vzb21l")?;
 /// assert_eq!(res, "HTTPBIN is awesome");
 /// # Ok(()) }
@@ -304,7 +307,7 @@ pub use retrofit_macros::request;
 ///     fn utf8_demo(&self) -> String;
 /// }
 ///
-/// # fn main() -> reqwest::Result<()> {
+/// # fn main() -> retrofit::Result<()> {
 /// let res = http_bin().utf8_demo()?;
 /// assert!(!res.is_empty());
 /// # Ok(()) }
@@ -326,7 +329,7 @@ pub use retrofit_macros::request;
 ///     fn bytes(&self, len: usize) -> bytes::Bytes;
 /// }
 ///
-/// # fn main() -> reqwest::Result<()> {
+/// # fn main() -> retrofit::Result<()> {
 /// let res = http_bin().bytes(8)?;
 /// assert_eq!(res.len(), 8);
 /// # Ok(()) }

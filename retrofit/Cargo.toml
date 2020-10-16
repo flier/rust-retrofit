@@ -4,11 +4,16 @@ version = "0.1.0"
 authors = ["Flier Lu <flier.lu@gmail.com>"]
 edition = "2018"
 
+[features]
+default = ["reqwest-client"]
+reqwest-client = ["retrofit-macros/reqwest-client", "retrofit-reqwest"]
+
 [dependencies]
 tracing = "0.1"
 
 retrofit-core = { version = "0.1", path = "../retrofit-core" }
 retrofit-macros = { version = "0.1", path = "../retrofit-macros" }
+retrofit-reqwest = { version = "0.1", path = "../retrofit-reqwest", optional = true }
 
 [dev-dependencies]
 anyhow = "1.0"

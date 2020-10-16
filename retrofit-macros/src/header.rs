@@ -80,12 +80,12 @@ impl ToTokens for Headers {
                     ..
                 }) => {
                     quote! {
-                        reqwest::header::HeaderValue::from_static(#value)
+                        retrofit::HeaderValue::from_static(#value)
                     }
                 }
                 value => {
                     quote! {
-                        reqwest::header::HeaderValue::from_maybe_shared(#value).expect("header value")
+                        retrofit::HeaderValue::from_maybe_shared(#value).expect("header value")
                     }
                 }
             };
@@ -100,7 +100,7 @@ impl ToTokens for Headers {
 
         let expanded = quote! {
             {
-                let mut headers = reqwest::header::HeaderMap::new();
+                let mut headers = retrofit::HeaderMap::new();
                 #(#insert_headers)*
                 headers
             }

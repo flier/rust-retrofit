@@ -9,6 +9,10 @@ edition = "2018"
 [lib]
 proc-macro = true
 
+[features]
+default = []
+reqwest-client = ["retrofit-reqwest"]
+
 [dependencies]
 tracing = "0.1"
 case = "1.0"
