@@ -2,15 +2,17 @@
 
 use std::result::Result as StdResult;
 
+use lazy_static::lazy_static;
 use proc_macro2::{Span, TokenStream};
-use quote::ToTokens;
+use quote::{quote, ToTokens};
+use regex::Regex;
 use syn::{
     parenthesized,
     parse::{Parse, ParseStream},
     parse_quote,
     punctuated::Punctuated,
     spanned::Spanned,
-    token, Attribute, Error, Expr, Ident, LitStr, Result, Token, TraitItemMethod,
+    token, Attribute, Error, Expr, Ident, LitByteStr, LitStr, Result, Token, TraitItemMethod,
 };
 
 pub fn request(_attr: LitStr, item: TraitItemMethod) -> Result<TokenStream> {
@@ -138,6 +140,72 @@ impl Request {
                 method.sig.ident
             ),
         ))
+    }
+}
+
+lazy_static! {
+    static ref RE_FMT_ARG: Regex = Regex::new(r"\{(?P<name>\w+)(:[^\}]+)?\}").unwrap();
+}
+
+impl ToTokens for Request {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let http_method = match self.method {
+            http::Method::GET
+            | http::Method::DELETE
+            | http::Method::HEAD
+            | http::Method::OPTIONS
+            | http::Method::PATCH
+            | http::Method::POST
+            | http::Method::TRACE
+            | http::Method::PUT => {
+                let method = Ident::new(self.method.as_str(), Span::call_site());
+
+                quote! {
+                    retrofit::Method::#method
+                }
+            }
+            _ => {
+                let method = LitByteStr::new(self.method.as_str().as_bytes(), Span::call_site());
+
+                quote! {
+                    retrofit::Method::from_bytes(#method).expect("method")
+                }
+            }
+        };
+        let path = &self.path;
+        let args = {
+            let fmt = path.value();
+            let args = &self.args;
+            let args = args.iter().cloned().chain(
+                RE_FMT_ARG
+                    .captures_iter(&fmt)
+                    .flat_map(|cap| {
+                        let name = &cap["name"];
+                        if args.iter().any(|arg| arg.ident == name) {
+                            None
+                        } else {
+                            Some(Ident::new(name, Span::call_site()))
+                        }
+                    })
+                    .map(|id| {
+                        parse_quote! { #id = #id }
+                    }),
+            );
+
+            quote! { #(#args),* }
+        };
+
+        let expanded = quote! {{
+            let url = format!(
+                concat!("{base_url}", #path),
+                base_url = self.base_url,
+                #args
+            );
+
+            self.client.request(#http_method, &url)
+        }};
+
+        expanded.to_tokens(tokens);
     }
 }
 

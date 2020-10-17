@@ -1,19 +1,15 @@
+use std::ops::Deref;
+
 use case::CaseExt;
-use lazy_static::lazy_static;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{quote, ToTokens};
-use regex::Regex;
-use syn::{parse_quote, punctuated::Punctuated, ItemTrait, LitByteStr, Result, Token};
+use syn::{parse_quote, punctuated::Punctuated, ItemTrait, Result, Token};
 
 use crate::{
     header::Headers,
     request::{Arg, Args, Request},
     response,
 };
-
-lazy_static! {
-    static ref RE_FMT_ARG: Regex = Regex::new(r"\{(?P<name>\w+)(:[^\}]+)?\}").unwrap();
-}
 
 pub fn client(_args: Args, item: ItemTrait) -> Result<TokenStream> {
     Ok(item.into_token_stream())
@@ -113,7 +109,7 @@ fn ensure_trait_bound(supertraits: &mut Punctuated<syn::TypeParamBound, Token![+
     }
 }
 
-fn generate_methods<'a>(items: &'a mut [syn::TraitItem]) -> impl Iterator<Item = TokenStream> + 'a {
+fn generate_methods<'a>(items: &'a mut [syn::TraitItem]) -> impl Iterator<Item = Method> + 'a {
     items
         .iter_mut()
         .flat_map(|item| match item {
@@ -140,58 +136,27 @@ fn generate_methods<'a>(items: &'a mut [syn::TraitItem]) -> impl Iterator<Item =
                 }
             }
 
-            method
+            Method(method)
         })
-        .map(|method| {
-            let sig = &method.sig;
-            let req = Request::extract(&method).expect("request");
-            let http_method = match req.method {
-                http::Method::GET
-                | http::Method::DELETE
-                | http::Method::HEAD
-                | http::Method::OPTIONS
-                | http::Method::PATCH
-                | http::Method::POST
-                | http::Method::TRACE
-                | http::Method::PUT => {
-                    let method = Ident::new(req.method.as_str(), Span::call_site());
+}
 
-                    quote! {
-                        retrofit::Method::#method
-                    }
-                }
-                _ => {
-                    let method = LitByteStr::new(req.method.as_str().as_bytes(), Span::call_site());
+struct Method<'a>(&'a syn::TraitItemMethod);
 
-                    quote! {
-                        retrofit::Method::from_bytes(#method).expect("method")
-                    }
-                }
-            };
-            let path = req.path;
-            let args = {
-                let fmt = path.value();
-                let args = req.args;
-                let args = args.iter().cloned().chain(
-                    RE_FMT_ARG
-                        .captures_iter(&fmt)
-                        .flat_map(|cap| {
-                            let name = &cap["name"];
-                            if args.iter().any(|arg| arg.ident == name) {
-                                None
-                            } else {
-                                Some(Ident::new(name, Span::call_site()))
-                            }
-                        })
-                        .map(|id| {
-                            parse_quote! { #id = #id }
-                        }),
-                );
+impl<'a> Deref for Method<'a> {
+    type Target = syn::TraitItemMethod;
 
-                quote! { #(#args),* }
-            };
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
+}
 
-            let headers = match Headers::extract("headers", &method.attrs) {
+impl<'a> ToTokens for Method<'a> {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let sig = &self.sig;
+
+        let request = {
+            let request = Request::extract(self).expect("request");
+            let headers = match Headers::extract("headers", &self.attrs) {
                 Ok(headers) => {
                     if headers.is_empty() {
                         None
@@ -201,50 +166,45 @@ fn generate_methods<'a>(items: &'a mut [syn::TraitItem]) -> impl Iterator<Item =
                 }
                 Err(err) => Some(err.to_compile_error()),
             };
-
-            let encode_request = {
-                let options = Args::extract("request", &method.attrs)
-                    .expect("request")
-                    .into_iter()
-                    .map(|Arg { ident, expr, .. }| {
-                        if let Some(expr) = expr {
-                            quote! { .#ident(#expr) }
-                        } else {
-                            quote! { .#ident(#ident) }
-                        }
-                    });
-
-                quote! {
-                    self.client.request(#http_method, &url)
-                        #headers
-                        #(#options)*
-                }
-            };
-
-            let decode_response = match response::extract(&method.attrs) {
-                Ok(Some(decode)) => quote! { res.#decode },
-                Ok(None) => quote! { res.json() },
-                Err(err) => err.to_compile_error(),
-            };
+            let options = Args::extract("request", &self.attrs)
+                .expect("request")
+                .into_iter()
+                .map(|Arg { ident, expr, .. }| {
+                    if let Some(expr) = expr {
+                        quote! { .#ident(#expr) }
+                    } else {
+                        quote! { .#ident(#ident) }
+                    }
+                });
 
             quote! {
-                #sig {
-                    let url = format!(
-                        concat!("{base_url}", #path),
-                        base_url = self.base_url,
-                        #args
-                    );
-                    let req = #encode_request;
-                    tracing::trace!(?req);
-                    let res = req.send()?;
-                    tracing::trace!(?res);
-                    // tracing::trace!(text = %{
-                    //     let mut buf: Vec<u8> = vec![];
-                    //     res.copy_to(&mut buf)?;
-                    //     String::from_utf8(buf).unwrap()
-                    // });
-                    #decode_response
-                }
+                #request
+                    #headers
+                    #(#options)*
             }
-        })
+        };
+
+        let response = match response::extract(&self.attrs) {
+            Ok(Some(decode)) => quote! { res.#decode },
+            Ok(None) => quote! { res.json() },
+            Err(err) => err.to_compile_error(),
+        };
+
+        let expanded = quote! {
+            #sig {
+                let req = #request;
+                tracing::trace!(?req);
+                let res = req.send()?;
+                tracing::trace!(?res);
+                // tracing::trace!(text = %{
+                //     let mut buf: Vec<u8> = vec![];
+                //     res.copy_to(&mut buf)?;
+                //     String::from_utf8(buf).unwrap()
+                // });
+                #response
+            }
+        };
+
+        expanded.to_tokens(tokens);
+    }
 }
