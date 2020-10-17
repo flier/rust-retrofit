@@ -6,22 +6,20 @@ edition = "2018"
 
 [features]
 default = ["reqwest-client"]
-reqwest-client = ["reqwest"]
+reqwest-client = ["retrofit-reqwest"]
 
 [dependencies]
 cfg-if = "0.1"
 tracing = "0.1"
 
-reqwest = { version = "0.10", features = ["blocking", "json"], optional = true }
-
 retrofit-core = { version = "0.1", path = "../retrofit-core" }
 retrofit-macros = { version = "0.1", path = "../retrofit-macros" }
+retrofit-reqwest = { version = "0.1", path = "../retrofit-reqwest", optional = true }
 
 [dev-dependencies]
 anyhow = "1.0"
 bytes = "0.5"
 tracing-subscriber = "0.2"
-reqwest = { version = "0.10", features = ["blocking", "json"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 structopt = "0.3"
