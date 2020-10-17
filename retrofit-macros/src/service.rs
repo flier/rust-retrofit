@@ -21,7 +21,6 @@ pub fn client(_args: Args, item: ItemTrait) -> Result<TokenStream> {
 
 pub fn service(args: Args, mut item: ItemTrait) -> Result<TokenStream> {
     ensure_trait_bound(&mut item.supertraits);
-    ensure_method_return_result(&mut item.items);
 
     let client_options =
         Args::extract("client", &item.attrs)?
@@ -44,7 +43,7 @@ pub fn service(args: Args, mut item: ItemTrait) -> Result<TokenStream> {
     let fn_name = Ident::new(&trait_name.to_string().to_snake(), Span::call_site());
     let client_name = Ident::new(&format!("{}Client", trait_name), Span::call_site());
 
-    let methods = generate_methods(&item.items);
+    let methods = generate_methods(&mut item.items);
 
     let default_headers = Headers::extract("default_headers", &item.attrs)?;
     let default_headers = if default_headers.is_empty() {
@@ -114,10 +113,15 @@ fn ensure_trait_bound(supertraits: &mut Punctuated<syn::TypeParamBound, Token![+
     }
 }
 
-fn ensure_method_return_result(items: &mut [syn::TraitItem]) {
-    for item in items.iter_mut() {
-        match item {
-            syn::TraitItem::Method(method) if method.default.is_none() => match method.sig.output {
+fn generate_methods<'a>(items: &'a mut [syn::TraitItem]) -> impl Iterator<Item = TokenStream> + 'a {
+    items
+        .iter_mut()
+        .flat_map(|item| match item {
+            syn::TraitItem::Method(method) if method.default.is_none() => Some(method),
+            _ => None,
+        })
+        .map(|method| {
+            match method.sig.output {
                 syn::ReturnType::Default => {
                     method.sig.output = parse_quote! { -> Result<(), Self::Error> };
                 }
@@ -134,18 +138,9 @@ fn ensure_method_return_result(items: &mut [syn::TraitItem]) {
                         *ty = Box::new(parse_quote! { Result<#return_type, Self::Error> })
                     }
                 }
-            },
-            _ => {}
-        }
-    }
-}
+            }
 
-fn generate_methods<'a>(items: &'a [syn::TraitItem]) -> impl Iterator<Item = TokenStream> + 'a {
-    items
-        .iter()
-        .flat_map(|item| match item {
-            syn::TraitItem::Method(method) if method.default.is_none() => Some(method),
-            _ => None,
+            method
         })
         .map(|method| {
             let sig = &method.sig;
