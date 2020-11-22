@@ -52,7 +52,9 @@ pub fn service(args: Args, mut item: ItemTrait) -> Result<TokenStream> {
     let impl_fn = quote! {
         #vis fn #fn_name() -> impl #trait_name {
             struct #client_name {
-                client: retrofit::blocking::Client,
+                builder: std::cell::RefCell<Option<retrofit::blocking::ClientBuilder>>,
+                client: std::cell::RefCell<Option<retrofit::blocking::Client>>,
+                init: std::sync::Once,
                 base_url: String,
             }
 
@@ -68,15 +70,38 @@ pub fn service(args: Args, mut item: ItemTrait) -> Result<TokenStream> {
 
             static APP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
-            let mut builder = retrofit::blocking::Client::builder()
-                .user_agent(APP_USER_AGENT)
-                #default_headers
-                #(#client_options)*;
+            impl #client_name {
+                fn with_builder(mut self, builder: retrofit::blocking::ClientBuilder) -> Self {
+                    *self.builder.borrow_mut() = Some(builder);
+                    self
+                }
 
-            tracing::trace!(?builder);
+                fn with_client(mut self, client: retrofit::blocking::Client) -> Self {
+                    *self.client.borrow_mut() = Some(client);
+                    self
+                }
+
+                fn client(&self) -> std::cell::Ref<Option<retrofit::blocking::Client>> {
+                    self.init.call_once(|| {
+                        if self.client.borrow().is_none() {
+                            let mut builder = self.builder.borrow_mut().take().unwrap_or_else(retrofit::blocking::Client::builder)
+                                .user_agent(APP_USER_AGENT)
+                                #default_headers
+                                #(#client_options)*;
+
+                            tracing::trace!(?builder);
+
+                            *self.client.borrow_mut() = Some(builder.build().expect("client"))
+                        }
+                    });
+                    self.client.borrow()
+                }
+            }
 
             #client_name {
-                client: builder.build().expect("client"),
+                builder: std::cell::RefCell::new(None),
+                client: std::cell::RefCell::new(None),
+                init: std::sync::Once::new(),
                 #(#service_options)*
             }
         }

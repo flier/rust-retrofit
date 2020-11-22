@@ -202,7 +202,7 @@ impl ToTokens for Request {
                 #args
             );
 
-            self.client.request(#http_method, &url)
+            self.client().as_ref().unwrap().request(#http_method, &url)
         }};
 
         expanded.to_tokens(tokens);

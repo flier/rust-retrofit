@@ -8,6 +8,7 @@ pub type HeaderValue = reqwest::header::HeaderValue;
 
 pub mod blocking {
     pub type Client = reqwest::blocking::Client;
+    pub type ClientBuilder = reqwest::blocking::ClientBuilder;
     pub type Body = reqwest::blocking::Body;
     pub mod multipart {
         pub type Form = reqwest::blocking::multipart::Form;
